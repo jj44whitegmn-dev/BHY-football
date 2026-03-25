@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="足彩预测">
+  <meta name="theme-color" content="#0f172a">
+  <title>足彩预测</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            slate: {
+              950: '#020617',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+
+<!-- ── Toast ─────────────────────────────────────────── -->
+<div id="toast-container"></div>
+
+<!-- ── Header ─────────────────────────────────────────── -->
+<header class="sticky top-0 z-30 px-4 py-3 flex items-center justify-between" style="background:#0f172a;border-bottom:1px solid #1e293b">
+  <div class="flex items-center gap-2">
+    <span class="text-xl">⚽</span>
+    <span class="font-bold text-base text-white">足彩预测</span>
+  </div>
+  <button id="btn-settings" class="btn btn-sm btn-ghost">参数设置</button>
+</header>
+
+<!-- ── Pages ──────────────────────────────────────────── -->
+<main class="px-4 pt-3 max-w-lg mx-auto">
+
+  <!-- 分析 page -->
+  <div id="page-analysis" class="page">
+    <div id="analysis-content"></div>
+  </div>
+
+  <!-- 串关 page -->
+  <div id="page-parlay" class="page">
+    <div id="parlay-content"></div>
+  </div>
+
+  <!-- 记录 page -->
+  <div id="page-records" class="page">
+    <div id="records-content"></div>
+  </div>
+
+  <!-- 账单 page -->
+  <div id="page-finance" class="page">
+    <div id="finance-content"></div>
+  </div>
+
+  <!-- 复盘 page -->
+  <div id="page-review" class="page">
+    <div id="review-content"></div>
+  </div>
+
+</main>
+
+<!-- ── Parlay bar (above nav) ─────────────────────────── -->
+<div id="parlay-bar"></div>
+
+<!-- ── FAB ───────────────────────────────────────────── -->
+<button class="fab" id="fab-add" aria-label="添加比赛">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:24px;height:24px">
+    <path d="M12 5v14M5 12h14"/>
+  </svg>
+</button>
+
+<!-- ── Bottom Nav ─────────────────────────────────────── -->
+<nav id="bottom-nav">
+  <button class="nav-btn" id="nav-analysis" data-page="analysis">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+      <path d="M9 19v-6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2zm0 0V9a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v10m-6 0a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2m0 0V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-2a2 2 0 0 1-2-2z"/>
+    </svg>
+    分析
+  </button>
+  <button class="nav-btn" id="nav-parlay" data-page="parlay">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+      <path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>
+    </svg>
+    串关
+  </button>
+  <button class="nav-btn" id="nav-records" data-page="records">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+      <path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/>
+      <rect x="9" y="3" width="6" height="4" rx="1"/>
+      <path d="m9 12 2 2 4-4"/>
+    </svg>
+    记录
+  </button>
+  <button class="nav-btn" id="nav-finance" data-page="finance">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+      <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+    </svg>
+    账单
+  </button>
+  <button class="nav-btn" id="nav-review" data-page="review">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+      <path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/>
+    </svg>
+    复盘
+  </button>
+</nav>
+
+<!-- ── Scripts ────────────────────────────────────────── -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="js/config.js"></script>
+<script src="js/engine.js"></script>
+<script src="js/storage.js"></script>
+<script src="js/parlay.js"></script>
+<script src="js/ui.js"></script>
+
+<script>
+  // Register service worker for PWA offline support
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('sw.js').catch(() => {});
+    });
+  }
+</script>
+
+</body>
+</html>

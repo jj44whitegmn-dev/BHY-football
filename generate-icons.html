@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<!-- Open this file in a browser, then right-click each canvas and save as icon-192.png / icon-512.png -->
+<html><body style="background:#0f172a;padding:20px;font-family:sans-serif;color:white">
+<h3>点击按钮生成图标，然后右键保存到 icons/ 文件夹</h3>
+<canvas id="c192" width="192" height="192" style="display:block;margin:10px 0;border-radius:20px"></canvas>
+<canvas id="c512" width="512" height="512" style="display:block;margin:10px 0;border-radius:40px"></canvas>
+<button onclick="generate()" style="padding:10px 20px;background:#0ea5e9;color:white;border:none;border-radius:8px;cursor:pointer;font-size:16px">生成图标</button>
+<p id="msg"></p>
+<script>
+function drawIcon(canvas, size) {
+  const ctx = canvas.getContext('2d');
+  const r = size * 0.12;
+  // Background
+  const grad = ctx.createLinearGradient(0, 0, size, size);
+  grad.addColorStop(0, '#0c4a6e');
+  grad.addColorStop(1, '#0f172a');
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.roundRect(0, 0, size, size, r);
+  ctx.fill();
+  // Football emoji-style circle
+  const cx = size / 2, cy = size * 0.45, radius = size * 0.3;
+  ctx.strokeStyle = 'white';
+  ctx.lineWidth = size * 0.025;
+  ctx.fillStyle = '#16a34a';
+  ctx.beginPath();
+  ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  // Pentagon pattern (simplified lines)
+  ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+  ctx.lineWidth = size * 0.018;
+  // center pentagon
+  const pts = 5, angleOffset = -Math.PI / 2;
+  const pr = radius * 0.35;
+  for (let i = 0; i < pts; i++) {
+    const a1 = angleOffset + (i / pts) * Math.PI * 2;
+    const a2 = angleOffset + ((i + 1) / pts) * Math.PI * 2;
+    ctx.beginPath();
+    ctx.moveTo(cx + pr * Math.cos(a1), cy + pr * Math.sin(a1));
+    ctx.lineTo(cx + pr * Math.cos(a2), cy + pr * Math.sin(a2));
+    for (let j = 0; j < pts; j++) {
+      const a3 = angleOffset + (j / pts) * Math.PI * 2;
+      const er = radius * 0.9;
+      ctx.moveTo(cx + pr * Math.cos(a1), cy + pr * Math.sin(a1));
+      ctx.lineTo(cx + er * Math.cos(a1 + Math.PI * 2 / pts * 0.5), cy + er * Math.sin(a1 + Math.PI * 2 / pts * 0.5));
+    }
+    ctx.stroke();
+  }
+  // Text label
+  ctx.fillStyle = 'white';
+  ctx.font = `bold ${size * 0.12}px -apple-system,sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('足彩', cx, size * 0.85);
+}
+
+function generate() {
+  drawIcon(document.getElementById('c192'), 192);
+  drawIcon(document.getElementById('c512'), 512);
+
+  // Auto-download
+  ['c192','c512'].forEach((id, i) => {
+    const canvas = document.getElementById(id);
+    const a = document.createElement('a');
+    a.download = id === 'c192' ? 'icon-192.png' : 'icon-512.png';
+    a.href = canvas.toDataURL('image/png');
+    a.click();
+  });
+  document.getElementById('msg').textContent = '已下载！请将文件移动到 icons/ 文件夹';
+}
+generate();
+</script>
+</body></html>
