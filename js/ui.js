@@ -488,6 +488,17 @@ const App = (() => {
         ? await Vision.recognizeOpening(file, company)
         : await Vision.recognizeClosing(file, company);
 
+      // 盘口值校验：必须是0.25的倍数且绝对值≤3，否则是列错位
+      const isValidLine = v => v == null || (Math.abs(v) <= 3 && Math.abs(Math.round(v * 4) - v * 4) < 0.01);
+
+      // 盘口识别错误时清空并警告
+      ['open_line','close_line'].forEach(k => {
+        if (r[k] != null && !isValidLine(r[k])) {
+          toast(`盘口识别异常（值${r[k]}不是有效盘口），请手动填写盘口列`, 'error', 4000);
+          r[k] = null;
+        }
+      });
+
       // 字段映射表：根据 company+type 填入对应输入框
       const fieldMap = {
         open_line:  company === 'pinnacle' ? 's2-pinn-ol'   : null,
