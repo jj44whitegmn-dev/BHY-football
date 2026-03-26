@@ -81,9 +81,21 @@ const App = (() => {
     $('btn-restart').addEventListener('click', restartAnalysis);
     $('btn-new-analysis').addEventListener('click', () => { showPage('analysis'); restartAnalysis(); });
 
-    // 步骤2：输入变化时实时计算
+    // 步骤2：输入变化时实时计算否决模型
     ['s2-home-seq','s2-away-seq','s2-n','s2-decay','s2-pinn-home','s2-pinn-away'].forEach(id => {
       $(id) && $(id).addEventListener('input', computeVeto);
+    });
+
+    // 步骤2：新增盘口/水位字段监听
+    ['s2-pinn-ol','s2-pinn-oh','s2-pinn-oa','s2-pinn-cl','s2-will-oh','s2-will-oa'].forEach(id => {
+      $(id) && $(id).addEventListener('input', () => {
+        updateLineLabels();
+        updateAutoSignalPreview();
+      });
+    });
+    // 终盘水位字段也触发自动信号预览
+    ['s2-pinn-home','s2-pinn-away'].forEach(id => {
+      $(id) && $(id).addEventListener('input', updateAutoSignalPreview);
     });
 
     // 步骤3：输入变化时实时计算
@@ -185,12 +197,18 @@ const App = (() => {
     }
     if (n === 2) {
       analysis.step2 = {
-        home_seq:  gv('s2-home-seq'),
-        away_seq:  gv('s2-away-seq'),
-        n:         parseInt(gv('s2-n')) || 10,
-        decay:     parseFloat(gv('s2-decay')) || 0.8,
-        pinn_home: gn('s2-pinn-home'),
-        pinn_away: gn('s2-pinn-away'),
+        home_seq:       gv('s2-home-seq'),
+        away_seq:       gv('s2-away-seq'),
+        n:              parseInt(gv('s2-n')) || 10,
+        decay:          parseFloat(gv('s2-decay')) || 0.8,
+        pinn_open_line: gn('s2-pinn-ol'),
+        pinn_open_home: gn('s2-pinn-oh'),
+        pinn_open_away: gn('s2-pinn-oa'),
+        pinn_close_line: gn('s2-pinn-cl'),
+        pinn_home:      gn('s2-pinn-home'),
+        pinn_away:      gn('s2-pinn-away'),
+        will_open_home: gn('s2-will-oh'),
+        will_open_away: gn('s2-will-oa'),
         vetoResult: analysis.step2.vetoResult,
       };
     }
@@ -355,14 +373,69 @@ const App = (() => {
     disp.className = `signal-value-display ${val > 0 ? 'sv-pos' : val < 0 ? 'sv-neg' : 'sv-neu'}`;
   }
 
-  function autoFillSignals() {
-    const ph = analysis.step2.pinn_home || gn('s2-pinn-home');
-    const pa = analysis.step2.pinn_away || gn('s2-pinn-away');
-    const auto = Asian.autoCalc(ph, pa);
-    if (auto) {
-      if (analysis.step4.s1 === undefined) setSignal('s1', auto.s1);
-      if (analysis.step4.s3 === undefined) setSignal('s3', auto.s3);
+  // ── 步骤2：更新盘口标签显示 ──────────────────────────────
+  function updateLineLabels() {
+    const olv = gn('s2-pinn-ol');
+    const clv = gn('s2-pinn-cl');
+    const olLabel = $('s2-ol-label');
+    const clLabel = $('s2-cl-label');
+    if (olLabel) olLabel.textContent = olv !== null ? Asian.lineToLabel(olv) : '';
+    if (clLabel) clLabel.textContent = clv !== null ? Asian.lineToLabel(clv) : '';
+  }
+
+  // ── 步骤2：实时显示自动信号预览 ──────────────────────────
+  function updateAutoSignalPreview() {
+    const container = $('s2-auto-signals');
+    if (!container) return;
+
+    const autoResult = Asian.autoCalc({
+      pinnOpenLine:  gn('s2-pinn-ol'),
+      pinnOpenHome:  gn('s2-pinn-oh'),
+      pinnOpenAway:  gn('s2-pinn-oa'),
+      pinnCloseLine: gn('s2-pinn-cl'),
+      pinnCloseHome: gn('s2-pinn-home'),
+      pinnCloseAway: gn('s2-pinn-away'),
+      willOpenHome:  gn('s2-will-oh'),
+      willOpenAway:  gn('s2-will-oa'),
+    });
+
+    const keys = Object.keys(autoResult);
+    if (keys.length === 0) {
+      container.innerHTML = '<span class="text-gray-400 text-xs">输入数据后自动计算</span>';
+      return;
     }
+
+    const sigNames = { s1:'S1重心', s2:'S2分歧', s3:'S3绝对差', s4:'S4背离' };
+    const items = keys.map(k => {
+      const v = autoResult[k];
+      const cls = v > 0 ? 'text-green-600' : v < 0 ? 'text-red-500' : 'text-gray-500';
+      const label = v > 0 ? '偏主' : v < 0 ? '偏客' : '中性';
+      return `<span class="inline-flex items-center gap-1 mr-3 text-xs">
+        <span class="text-gray-600">${sigNames[k] || k}：</span>
+        <span class="font-bold ${cls}">${v >= 0 ? '+'+v : v} ${label}</span>
+      </span>`;
+    }).join('');
+    container.innerHTML = items;
+  }
+
+  function autoFillSignals() {
+    const s2 = analysis.step2;
+    const auto = Asian.autoCalc({
+      pinnOpenLine:  s2.pinn_open_line  ?? gn('s2-pinn-ol'),
+      pinnOpenHome:  s2.pinn_open_home  ?? gn('s2-pinn-oh'),
+      pinnOpenAway:  s2.pinn_open_away  ?? gn('s2-pinn-oa'),
+      pinnCloseLine: s2.pinn_close_line ?? gn('s2-pinn-cl'),
+      pinnCloseHome: s2.pinn_home       ?? gn('s2-pinn-home'),
+      pinnCloseAway: s2.pinn_away       ?? gn('s2-pinn-away'),
+      willOpenHome:  s2.will_open_home  ?? gn('s2-will-oh'),
+      willOpenAway:  s2.will_open_away  ?? gn('s2-will-oa'),
+    });
+    // 自动填入尚未手动设置的信号
+    ['s1','s2','s3','s4'].forEach(k => {
+      if (auto[k] !== undefined && analysis.step4[k] === undefined) {
+        setSignal(k, auto[k]);
+      }
+    });
     updateAsianTotal();
   }
 
