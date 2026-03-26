@@ -58,7 +58,7 @@ const Vision = (() => {
       },
       body: JSON.stringify({
         model: MODEL,
-        max_tokens: 500,
+        max_tokens: 800,
         messages: [{
           role: 'user',
           content: [
@@ -76,10 +76,24 @@ const Vision = (() => {
     }
 
     const data = await resp.json();
-    const text = (data.content?.[0]?.text || '').trim();
-    const m    = text.match(/\{[\s\S]*\}/);
-    if (!m) throw new Error('识别结果格式异常，请重试');
-    return JSON.parse(m[0]);
+    const raw  = (data.content?.[0]?.text || '').trim();
+
+    // 依次尝试解析：代码块JSON → 裸JSON → 宽松提取
+    function tryParse(str) {
+      // 1. markdown 代码块
+      let m = str.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
+      if (m) { try { return JSON.parse(m[1]); } catch {} }
+      // 2. 裸 JSON 对象（贪婪匹配最外层花括号）
+      m = str.match(/\{[\s\S]*\}/);
+      if (m) { try { return JSON.parse(m[0]); } catch {} }
+      // 3. 控制字符清洗后再试
+      if (m) { try { return JSON.parse(m[0].replace(/[\x00-\x1F\x7F]/g, ' ')); } catch {} }
+      return null;
+    }
+
+    const result = tryParse(raw);
+    if (!result) throw new Error('识别结果格式异常，请重试');
+    return result;
   }
 
   /**
@@ -138,23 +152,21 @@ ${LINE_RULES}
   终盘比最低点更偏主队（更负）→ s5=1；更偏客队（更正）→ s5=-1；无异常 → s5=0
 
 任务3（市场解读）：
-分析全部时间序列的盘口和水位变化，用1~2句中文总结市场动态，内容包括：
-- 主队水位整体趋势（持续下降=资金流入主队；持续上升=资金流出；震荡=无明显偏向）
-- 盘口是否有明显移动及时间节点（如"赛前X小时盘口升/降"）
-- 是否存在异常迹象（洗水、突然大幅变动后恢复等）
-- 综合市场倾向（偏主/偏客/中性）
+分析全部时间序列，用1~2句中文总结：主水趋势、盘口关键变动、是否有洗水、综合市场倾向。
 
-返回JSON，不要其他文字：
+重要：只输出下面的JSON，不加任何解释文字，不用markdown代码块，不在JSON外加任何内容。
+market_summary字段中不能使用双引号，用顿号代替。
+
 {
-  "close_line": 终盘盘口数值,
-  "close_home": 终盘主队水位,
-  "close_away": 终盘客队水位,
-  "s5": 降盘异常整数,
-  "market_summary": "市场解读文字（1~2句中文）"
+  "close_line": 终盘盘口数值（数字）,
+  "close_home": 终盘主队水位（数字）,
+  "close_away": 终盘客队水位（数字）,
+  "s5": 降盘异常（整数）,
+  "market_summary": "市场解读文字"
 }
 
 ${LINE_RULES}
-无法识别的数字字段填null，market_summary无法判断时填null。`;
+数字字段无法识别填null，market_summary无法判断填null。`;
     return callAPI(imageFile, prompt);
   }
 
