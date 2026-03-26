@@ -2,136 +2,272 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="足彩预测">
-  <meta name="theme-color" content="#0f172a">
-  <title>足彩预测</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>足彩分析助手</title>
   <link rel="manifest" href="manifest.json">
-  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <meta name="theme-color" content="#3b82f6">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="足彩助手">
   <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    tailwind.config = {
-      theme: {
-        extend: {
-          colors: {
-            slate: {
-              950: '#020617',
-            }
-          }
-        }
-      }
-    }
-  </script>
   <link rel="stylesheet" href="css/app.css">
 </head>
-<body>
+<body class="bg-gray-50 min-h-screen" style="padding-bottom: 60px;">
 
-<!-- ── Toast ─────────────────────────────────────────── -->
-<div id="toast-container"></div>
+  <!-- 顶部栏 -->
+  <header class="bg-blue-600 text-white px-4 py-3 flex items-center justify-between sticky top-0 z-40 shadow-md">
+    <h1 class="text-lg font-bold tracking-tight">足彩分析助手</h1>
+    <button id="btn-new-analysis" class="hidden bg-white text-blue-600 text-sm font-medium px-3 py-1.5 rounded-full">+ 新分析</button>
+  </header>
 
-<!-- ── Header ─────────────────────────────────────────── -->
-<header class="sticky top-0 z-30 px-4 py-3 flex items-center justify-between" style="background:#0f172a;border-bottom:1px solid #1e293b">
-  <div class="flex items-center gap-2">
-    <span class="text-xl">⚽</span>
-    <span class="font-bold text-base text-white">足彩预测</span>
+  <!-- 主内容区 -->
+  <main class="max-w-lg mx-auto">
+
+    <!-- ========== 分析页 ========== -->
+    <div id="page-analysis" class="page active">
+
+      <!-- 步骤指示器 -->
+      <div class="flex items-center px-6 py-4">
+        <div class="step-dot active" id="dot-1">1</div>
+        <div class="step-line" id="line-1-2"></div>
+        <div class="step-dot" id="dot-2">2</div>
+        <div class="step-line" id="line-2-3"></div>
+        <div class="step-dot" id="dot-3">3</div>
+        <div class="step-line" id="line-3-4"></div>
+        <div class="step-dot" id="dot-4">4</div>
+        <div class="step-line" id="line-4-5"></div>
+        <div class="step-dot" id="dot-5">5</div>
+      </div>
+
+      <!-- 步骤标题 -->
+      <div class="px-4 mb-2">
+        <p id="step-title" class="text-xs text-gray-400 text-center">步骤 1 / 5 &nbsp;·&nbsp; 基本信息</p>
+      </div>
+
+      <!-- ---- 步骤1：基本信息 ---- -->
+      <div id="step-1" class="step px-4 pb-4">
+        <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 space-y-3">
+          <div>
+            <label class="form-label">联赛</label>
+            <select id="s1-league" class="form-input"></select>
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="form-label">主队名称</label>
+              <input id="s1-home" type="text" class="form-input" placeholder="如：曼城">
+            </div>
+            <div>
+              <label class="form-label">客队名称</label>
+              <input id="s1-away" type="text" class="form-input" placeholder="如：阿森纳">
+            </div>
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="form-label">比赛日期</label>
+              <input id="s1-date" type="date" class="form-input">
+            </div>
+            <div>
+              <label class="form-label">比赛时间</label>
+              <input id="s1-time" type="time" class="form-input">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ---- 步骤2：近期战绩 ---- -->
+      <div id="step-2" class="step px-4 pb-4 hidden">
+        <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 space-y-3">
+          <div class="bg-blue-50 rounded-lg p-3 text-xs text-blue-700">
+            输入近期比赛结果序列，用空格分隔。<br>
+            <strong>W</strong>=胜 &nbsp;<strong>D</strong>=平 &nbsp;<strong>L</strong>=负 &nbsp;·&nbsp; 最左边是最早，最右边是最近
+          </div>
+          <div>
+            <label class="form-label">主队战绩 <span id="s2-home-label" class="text-blue-600"></span></label>
+            <input id="s2-home-seq" type="text" class="form-input font-mono text-sm" placeholder="W D L W W D W L W W" autocomplete="off" autocorrect="off" autocapitalize="characters">
+          </div>
+          <div>
+            <label class="form-label">客队战绩 <span id="s2-away-label" class="text-blue-600"></span></label>
+            <input id="s2-away-seq" type="text" class="form-input font-mono text-sm" placeholder="D W W L W D W W D L" autocomplete="off" autocorrect="off" autocapitalize="characters">
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="form-label">场数 N</label>
+              <input id="s2-n" type="number" class="form-input text-center" value="10" min="5" max="20">
+            </div>
+            <div>
+              <label class="form-label">衰减因子</label>
+              <input id="s2-decay" type="number" class="form-input text-center" value="0.8" min="0.5" max="1.0" step="0.05">
+            </div>
+          </div>
+          <!-- 可选：平博水位 -->
+          <details>
+            <summary class="text-sm text-gray-500 font-medium py-1 cursor-pointer">
+              平博终盘水位（可选）
+              <span class="text-xs text-gray-400 ml-1">— 用于平局修正判断和亚盘信号自动计算</span>
+            </summary>
+            <div class="grid grid-cols-2 gap-3 mt-3">
+              <div>
+                <label class="form-label">终盘主水</label>
+                <input id="s2-pinn-home" type="number" class="form-input text-center" placeholder="如 1.92" step="0.01" min="1">
+              </div>
+              <div>
+                <label class="form-label">终盘客水</label>
+                <input id="s2-pinn-away" type="number" class="form-input text-center" placeholder="如 1.98" step="0.01" min="1">
+              </div>
+            </div>
+          </details>
+          <!-- 否决模型实时预览 -->
+          <div id="s2-veto-preview" class="hidden rounded-xl p-3 text-sm bg-indigo-50 border border-indigo-100"></div>
+        </div>
+      </div>
+
+      <!-- ---- 步骤3：体彩赔率 ---- -->
+      <div id="step-3" class="step px-4 pb-4 hidden">
+        <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 space-y-3">
+          <p class="text-xs text-gray-400">输入竞彩足球胜平负赔率（三项）</p>
+          <div class="grid grid-cols-3 gap-3">
+            <div>
+              <label class="form-label text-green-700 text-center block">主胜</label>
+              <input id="s3-o-home" type="number" class="form-input text-center" placeholder="2.10" step="0.01" min="1.01">
+            </div>
+            <div>
+              <label class="form-label text-yellow-600 text-center block">平局</label>
+              <input id="s3-o-draw" type="number" class="form-input text-center" placeholder="3.20" step="0.01" min="1.01">
+            </div>
+            <div>
+              <label class="form-label text-red-600 text-center block">客胜</label>
+              <input id="s3-o-away" type="number" class="form-input text-center" placeholder="3.50" step="0.01" min="1.01">
+            </div>
+          </div>
+          <!-- EV预览 -->
+          <div id="s3-ev-preview" class="hidden"></div>
+        </div>
+      </div>
+
+      <!-- ---- 步骤4：亚盘信号 ---- -->
+      <div id="step-4" class="step px-4 pb-4 hidden">
+        <div class="space-y-3">
+          <p class="text-xs text-gray-400 px-1">根据实际盘口情况为每个信号打分。点击选择 +1（偏主）/ 0（中性）/ -1（偏客）</p>
+          <div id="s4-signals"></div>
+          <!-- 总分显示 -->
+          <div id="s4-total-box" class="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 hidden">
+            <div class="flex items-center justify-between">
+              <span class="text-sm font-semibold text-gray-700">亚盘总评分</span>
+              <span id="s4-total-num" class="text-2xl font-bold text-blue-700">0</span>
+            </div>
+            <p id="s4-total-interp" class="text-sm text-gray-500 mt-1"></p>
+          </div>
+        </div>
+      </div>
+
+      <!-- ---- 步骤5：分析结果 ---- -->
+      <div id="step-5" class="step px-4 pb-4 hidden">
+        <div id="s5-result" class="space-y-3"></div>
+        <div class="flex gap-3 mt-4">
+          <button id="btn-save-record" class="btn btn-primary flex-1">保存记录</button>
+          <button id="btn-restart" class="btn btn-ghost flex-1">重新分析</button>
+        </div>
+      </div>
+
+      <!-- 步骤导航按钮 -->
+      <div class="flex gap-3 px-4 pb-6 mt-2" id="step-nav">
+        <button id="btn-prev" class="btn btn-ghost flex-1 hidden">← 上一步</button>
+        <button id="btn-next" class="btn btn-primary flex-1">下一步 →</button>
+      </div>
+
+    </div><!-- /page-analysis -->
+
+    <!-- ========== 记录页 ========== -->
+    <div id="page-records" class="page hidden">
+      <div class="px-4 pt-4">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="text-base font-semibold text-gray-700">历史记录</h2>
+          <div class="flex gap-2">
+            <button class="filter-btn active" data-filter="all">全部</button>
+            <button class="filter-btn" data-filter="pending">待回填</button>
+          </div>
+        </div>
+        <div id="records-list"></div>
+      </div>
+    </div>
+
+    <!-- ========== 复盘页 ========== -->
+    <div id="page-review" class="page hidden">
+      <div class="px-4 pt-4">
+        <h2 class="text-base font-semibold text-gray-700 mb-3">复盘统计</h2>
+        <div id="review-content"></div>
+      </div>
+    </div>
+
+    <!-- ========== 账单页 ========== -->
+    <div id="page-finance" class="page hidden">
+      <div class="px-4 pt-4">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="text-base font-semibold text-gray-700">下注账单</h2>
+          <button id="btn-add-bet" class="btn btn-primary btn-sm">+ 添加</button>
+        </div>
+        <div id="finance-summary" class="grid grid-cols-3 gap-3 mb-4"></div>
+        <div id="bets-list"></div>
+      </div>
+    </div>
+
+    <!-- ========== 设置页 ========== -->
+    <div id="page-settings" class="page hidden">
+      <div class="px-4 pt-4">
+        <h2 class="text-base font-semibold text-gray-700 mb-3">参数设置</h2>
+        <div id="settings-content"></div>
+      </div>
+    </div>
+
+  </main><!-- /main -->
+
+  <!-- 底部导航 -->
+  <nav class="bottom-nav">
+    <button class="nav-btn active" data-page="analysis">
+      <svg class="nav-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+      <span>分析</span>
+    </button>
+    <button class="nav-btn" data-page="records">
+      <svg class="nav-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+      <span>记录</span>
+    </button>
+    <button class="nav-btn" data-page="review">
+      <svg class="nav-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z"/></svg>
+      <span>复盘</span>
+    </button>
+    <button class="nav-btn" data-page="finance">
+      <svg class="nav-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+      <span>账单</span>
+    </button>
+    <button class="nav-btn" data-page="settings">
+      <svg class="nav-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+      <span>设置</span>
+    </button>
+  </nav>
+
+  <!-- 模态框（记录详情 / 回填结果） -->
+  <div id="modal-overlay" class="modal-overlay hidden" id="modal-overlay">
+    <div class="modal-sheet">
+      <div class="modal-handle"></div>
+      <div class="flex items-center justify-between px-4 pt-3 pb-2 border-b border-gray-100 flex-shrink-0">
+        <span id="modal-title" class="text-sm font-semibold text-gray-700"></span>
+        <button id="modal-close" class="text-gray-400 text-2xl leading-none">&times;</button>
+      </div>
+      <div id="modal-content" class="overflow-y-auto flex-1 p-4" style="-webkit-overflow-scrolling: touch;"></div>
+    </div>
   </div>
-  <button id="btn-settings" class="btn btn-sm btn-ghost">参数设置</button>
-</header>
 
-<!-- ── Pages ──────────────────────────────────────────── -->
-<main class="px-4 pt-3 max-w-lg mx-auto">
+  <!-- Toast 通知 -->
+  <div id="toast" class="toast hidden"></div>
 
-  <!-- 分析 page -->
-  <div id="page-analysis" class="page">
-    <div id="analysis-content"></div>
-  </div>
-
-  <!-- 串关 page -->
-  <div id="page-parlay" class="page">
-    <div id="parlay-content"></div>
-  </div>
-
-  <!-- 记录 page -->
-  <div id="page-records" class="page">
-    <div id="records-content"></div>
-  </div>
-
-  <!-- 账单 page -->
-  <div id="page-finance" class="page">
-    <div id="finance-content"></div>
-  </div>
-
-  <!-- 复盘 page -->
-  <div id="page-review" class="page">
-    <div id="review-content"></div>
-  </div>
-
-</main>
-
-<!-- ── Parlay bar (above nav) ─────────────────────────── -->
-<div id="parlay-bar"></div>
-
-<!-- ── FAB ───────────────────────────────────────────── -->
-<button class="fab" id="fab-add" aria-label="添加比赛">
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:24px;height:24px">
-    <path d="M12 5v14M5 12h14"/>
-  </svg>
-</button>
-
-<!-- ── Bottom Nav ─────────────────────────────────────── -->
-<nav id="bottom-nav">
-  <button class="nav-btn" id="nav-analysis" data-page="analysis">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-      <path d="M9 19v-6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2zm0 0V9a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v10m-6 0a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2m0 0V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-2a2 2 0 0 1-2-2z"/>
-    </svg>
-    分析
-  </button>
-  <button class="nav-btn" id="nav-parlay" data-page="parlay">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-      <path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>
-    </svg>
-    串关
-  </button>
-  <button class="nav-btn" id="nav-records" data-page="records">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-      <path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/>
-      <rect x="9" y="3" width="6" height="4" rx="1"/>
-      <path d="m9 12 2 2 4-4"/>
-    </svg>
-    记录
-  </button>
-  <button class="nav-btn" id="nav-finance" data-page="finance">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-      <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
-    </svg>
-    账单
-  </button>
-  <button class="nav-btn" id="nav-review" data-page="review">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-      <path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/>
-    </svg>
-    复盘
-  </button>
-</nav>
-
-<!-- ── Scripts ────────────────────────────────────────── -->
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-<script src="js/config.js"></script>
-<script src="js/engine.js"></script>
-<script src="js/storage.js"></script>
-<script src="js/parlay.js"></script>
-<script src="js/ui.js"></script>
-
-<script>
-  // Register service worker for PWA offline support
-  if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-      navigator.serviceWorker.register('sw.js').catch(() => {});
-    });
-  }
-</script>
-
+  <!-- JS 脚本（按依赖顺序加载） -->
+  <script src="js/config.js"></script>
+  <script src="js/veto.js"></script>
+  <script src="js/ev.js"></script>
+  <script src="js/asian.js"></script>
+  <script src="js/decision.js"></script>
+  <script src="js/storage.js"></script>
+  <script src="js/stats.js"></script>
+  <script src="js/ui.js"></script>
 </body>
 </html>

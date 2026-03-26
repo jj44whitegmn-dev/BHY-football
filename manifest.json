@@ -1,24 +1,22 @@
 {
-  "name": "足彩预测",
-  "short_name": "足彩预测",
-  "description": "足球比赛预测与串关投注管理工具",
+  "name": "足彩分析助手",
+  "short_name": "足彩助手",
+  "description": "竞彩足球赔率价值分析工具",
   "start_url": "./index.html",
   "display": "standalone",
+  "background_color": "#f9fafb",
+  "theme_color": "#3b82f6",
   "orientation": "portrait",
-  "background_color": "#0f172a",
-  "theme_color": "#0f172a",
   "icons": [
     {
       "src": "icons/icon-192.png",
       "sizes": "192x192",
-      "type": "image/png",
-      "purpose": "any maskable"
+      "type": "image/png"
     },
     {
       "src": "icons/icon-512.png",
       "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "any maskable"
+      "type": "image/png"
     }
   ]
 }
