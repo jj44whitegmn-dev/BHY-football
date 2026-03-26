@@ -12,7 +12,7 @@
 const Vision = (() => {
 
   const API_URL = 'https://api.anthropic.com/v1/messages';
-  const MODEL   = 'claude-haiku-4-5-20251001';
+  const MODEL   = 'claude-sonnet-4-6';
 
   const LINE_RULES = `【列数据类型——必须严格区分，这是最常见的错误来源】
 页面共三列数据：
