@@ -159,8 +159,18 @@ const App = (() => {
     nav.classList.toggle('hidden', n === 5);
     if (n < 5) { next.textContent = '下一步 →'; }
 
-    // 如果到步骤4，自动填入可自动计算的信号
-    if (n === 4) autoFillSignals();
+    // 如果到步骤4，自动填入可自动计算的信号，并展示市场解读
+    if (n === 4) {
+      autoFillSignals();
+      if (analysis.step2.market_summary) {
+        const el = $('s4-market-summary');
+        if (el) {
+          // 保留标题span，追加文字节点
+          el.innerHTML = `<span class="font-semibold text-amber-700 block mb-1">市场解读参考</span>${analysis.step2.market_summary}`;
+          el.classList.remove('hidden');
+        }
+      }
+    }
     // 如果到步骤5，生成结果
     if (n === 5) buildResult();
   }
@@ -390,6 +400,14 @@ const App = (() => {
     disp.className = `signal-value-display ${val > 0 ? 'sv-pos' : val < 0 ? 'sv-neg' : 'sv-neu'}`;
   }
 
+  // ── 市场解读展示 ──────────────────────────────────────────
+  function showMarketSummary(text) {
+    const el = $('s2-market-summary');
+    if (!el) return;
+    el.textContent = text;
+    el.classList.remove('hidden');
+  }
+
   // ── 步骤2：更新盘口标签显示 ──────────────────────────────
   function updateLineLabels() {
     const olv = gn('s2-pinn-ol');
@@ -496,6 +514,12 @@ const App = (() => {
         setSignal('s5', r.s5);
         updateAsianTotal();
         filled++;
+      }
+
+      // 市场解读（仅临盘截图提供）
+      if (r.market_summary) {
+        analysis.step2.market_summary = r.market_summary;
+        showMarketSummary(r.market_summary);
       }
 
       const typeLabel = type === 'open' ? '开盘' : '临盘';
