@@ -98,23 +98,21 @@ const App = (() => {
       $(id) && $(id).addEventListener('input', updateAutoSignalPreview);
     });
 
-    // 步骤2：截图识别按钮
-    $('btn-vision-pinnacle') && $('btn-vision-pinnacle').addEventListener('click', () => {
-      $('vision-file-pinnacle').value = '';
-      $('vision-file-pinnacle').click();
-    });
-    $('btn-vision-william') && $('btn-vision-william').addEventListener('click', (e) => {
-      e.preventDefault();
-      $('vision-file-william').value = '';
-      $('vision-file-william').click();
-    });
-    $('vision-file-pinnacle') && $('vision-file-pinnacle').addEventListener('change', e => {
-      const file = e.target.files[0];
-      if (file) processVisionImage(file, 'pinnacle');
-    });
-    $('vision-file-william') && $('vision-file-william').addEventListener('change', e => {
-      const file = e.target.files[0];
-      if (file) processVisionImage(file, 'william_hill');
+    // 步骤2：截图识别按钮（平博开盘/临盘 + 威廉希尔开盘）
+    const visionBtns = [
+      { btn: 'btn-vision-pinn-open',  input: 'vision-file-pinn-open',  company: 'pinnacle',      type: 'open'  },
+      { btn: 'btn-vision-pinn-close', input: 'vision-file-pinn-close', company: 'pinnacle',      type: 'close' },
+      { btn: 'btn-vision-will-open',  input: 'vision-file-will-open',  company: 'william_hill',  type: 'open'  },
+    ];
+    visionBtns.forEach(({ btn, input, company, type }) => {
+      const btnEl = $(btn);
+      const inputEl = $(input);
+      if (!btnEl || !inputEl) return;
+      btnEl.addEventListener('click', e => { e.preventDefault(); inputEl.value = ''; inputEl.click(); });
+      inputEl.addEventListener('change', e => {
+        const file = e.target.files[0];
+        if (file) processVisionImage(file, company, type);
+      });
     });
 
     // 步骤3：输入变化时实时计算
@@ -459,44 +457,54 @@ const App = (() => {
   }
 
   // ── 截图识别处理 ──────────────────────────────────────────
-  async function processVisionImage(file, company) {
-    const btn = company === 'pinnacle' ? $('btn-vision-pinnacle') : $('btn-vision-william');
-    const origText = btn ? btn.innerHTML : '';
+  async function processVisionImage(file, company, type) {
+    const btnId = company === 'pinnacle'
+      ? (type === 'open' ? 'btn-vision-pinn-open' : 'btn-vision-pinn-close')
+      : 'btn-vision-will-open';
+    const btn = $(btnId);
+    const origHTML = btn ? btn.innerHTML : '';
     if (btn) { btn.classList.add('loading'); btn.textContent = '识别中…'; }
 
     try {
-      const r = await Vision.recognizeAsian(file, company);
+      const r = type === 'open'
+        ? await Vision.recognizeOpening(file, company)
+        : await Vision.recognizeClosing(file, company);
 
-      if (company === 'pinnacle') {
-        if (r.open_line  !== null && r.open_line  !== undefined) { const el = $('s2-pinn-ol');   if(el) { el.value = r.open_line;  el.dispatchEvent(new Event('input')); } }
-        if (r.open_home  !== null && r.open_home  !== undefined) { const el = $('s2-pinn-oh');   if(el) { el.value = r.open_home;  el.dispatchEvent(new Event('input')); } }
-        if (r.open_away  !== null && r.open_away  !== undefined) { const el = $('s2-pinn-oa');   if(el) { el.value = r.open_away;  el.dispatchEvent(new Event('input')); } }
-        if (r.close_line !== null && r.close_line !== undefined) { const el = $('s2-pinn-cl');   if(el) { el.value = r.close_line; el.dispatchEvent(new Event('input')); } }
-        if (r.close_home !== null && r.close_home !== undefined) { const el = $('s2-pinn-home'); if(el) { el.value = r.close_home; el.dispatchEvent(new Event('input')); } }
-        if (r.close_away !== null && r.close_away !== undefined) { const el = $('s2-pinn-away'); if(el) { el.value = r.close_away; el.dispatchEvent(new Event('input')); } }
-        computeVeto();
-      } else {
-        if (r.open_home !== null && r.open_home !== undefined) { const el = $('s2-will-oh'); if(el) { el.value = r.open_home; el.dispatchEvent(new Event('input')); } }
-        if (r.open_away !== null && r.open_away !== undefined) { const el = $('s2-will-oa'); if(el) { el.value = r.open_away; el.dispatchEvent(new Event('input')); } }
-      }
+      // 字段映射表：根据 company+type 填入对应输入框
+      const fieldMap = {
+        open_line:  company === 'pinnacle' ? 's2-pinn-ol'   : null,
+        open_home:  company === 'pinnacle' ? 's2-pinn-oh'   : 's2-will-oh',
+        open_away:  company === 'pinnacle' ? 's2-pinn-oa'   : 's2-will-oa',
+        close_line: 's2-pinn-cl',
+        close_home: 's2-pinn-home',
+        close_away: 's2-pinn-away',
+      };
 
+      let filled = 0;
+      Object.entries(fieldMap).forEach(([key, elId]) => {
+        if (!elId || r[key] == null) return;
+        const el = $(elId);
+        if (el) { el.value = r[key]; el.dispatchEvent(new Event('input')); filled++; }
+      });
+
+      computeVeto();
       updateLineLabels();
       updateAutoSignalPreview();
 
-      // S5 降盘异常：直接写入信号
-      if (r.s5 !== null && r.s5 !== undefined) {
+      // S5 降盘异常（仅临盘截图提供）
+      if (r.s5 != null) {
         setSignal('s5', r.s5);
         updateAsianTotal();
+        filled++;
       }
 
-      // 统计识别了几个字段
-      const filled = Object.values(r).filter(v => v !== null && v !== undefined).length;
-      toast(`识别完成，已填入 ${filled} 项数据`, 'success');
+      const typeLabel = type === 'open' ? '开盘' : '临盘';
+      toast(`${typeLabel}识别完成，已填入 ${filled} 项数据`, 'success');
 
     } catch (err) {
       toast(err.message || '识别失败，请重试', 'error', 3500);
     } finally {
-      if (btn) { btn.classList.remove('loading'); btn.innerHTML = origText; }
+      if (btn) { btn.classList.remove('loading'); btn.innerHTML = origHTML; }
     }
   }
 

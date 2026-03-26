@@ -20,27 +20,28 @@ const Veto = (() => {
    */
   function _weightedProbs(seq, decay) {
     const n = seq.length;
-    if (n === 0) return { win: 0, draw: 0, loss: 0 };
+    if (n === 0) return { win: 1/3, draw: 1/3, loss: 1/3 };
 
     let totalWeight = 0;
     let winWeight = 0;
     let drawWeight = 0;
-    let lossWeight = 0;
 
     for (let i = 0; i < n; i++) {
       const w = Math.pow(decay, n - 1 - i);
       totalWeight += w;
       if (seq[i] === 'W') winWeight += w;
       else if (seq[i] === 'D') drawWeight += w;
-      else if (seq[i] === 'L') lossWeight += w;
     }
 
-    if (totalWeight === 0) return { win: 0, draw: 0, loss: 0 };
-    return {
-      win:  winWeight  / totalWeight,
-      draw: drawWeight / totalWeight,
-      loss: lossWeight / totalWeight,
-    };
+    // Laplace平滑：每个结果加 ALPHA 虚拟权重，防止0%极端值
+    // 例：10场全败时，胜率从0%提升到约10%，更接近现实
+    const ALPHA = 1.0;
+    const smoothedTotal = totalWeight + ALPHA * 3;
+    const win  = (winWeight  + ALPHA) / smoothedTotal;
+    const draw = (drawWeight + ALPHA) / smoothedTotal;
+    const loss = 1 - win - draw;
+
+    return { win, draw, loss: Math.max(loss, 0) };
   }
 
   /**
