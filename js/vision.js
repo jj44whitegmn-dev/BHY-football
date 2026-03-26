@@ -40,18 +40,23 @@ const Vision = (() => {
     const mediaType = imageFile.type.startsWith('image/') ? imageFile.type : 'image/jpeg';
     const hint      = company === 'pinnacle' ? '平博（Pinnacle）' : '威廉希尔（William Hill）';
 
-    const prompt = `这是${hint}的亚盘赔率截图，来自澳客手机App的赔率变化页面。
-请识别图中的亚盘数据，严格以如下JSON格式返回，不要任何其他文字：
+    const prompt = `这是澳客手机App"盘口详情页-盘口变化"的截图，显示${hint}的亚盘赔率随时间变化。
+页面结构：左列=主队水位，中列=盘口，右列=客队水位；时间轴从上到下，最顶部一行标注"初始盘口"，最靠近赛前的行（最新行，通常标注"赛前0小时0分"或最小时间）是终盘。
+请识别并返回如下JSON，不要任何其他文字：
 {
-  "open_line": 初盘盘口数值（数字：-0.5=主让半球，0=平手，0.25=平/半客，null=无法识别），
-  "open_home": 初盘主队水位（数字如1.925，null=无法识别），
-  "open_away": 初盘客队水位（数字如1.925，null=无法识别），
-  "close_line": 终盘盘口（数字，无则null），
-  "close_home": 终盘主队水位（数字，无则null），
-  "close_away": 终盘客队水位（数字，无则null）
+  "open_line": 初盘盘口数值（数字，规则如下），
+  "open_home": 初盘主队水位（数字），
+  "open_away": 初盘客队水位（数字），
+  "close_line": 终盘盘口（即最新/最靠近赛前的那行），
+  "close_home": 终盘主队水位，
+  "close_away": 终盘客队水位
 }
-盘口规则：负数=主队让球，正数=客队让球，0=平手，0.25=平半（客让）。
-水位通常在0.8~1.0之间或欧赔1.5~3.0之间，请注意区分。`;
+盘口转换规则（中文→数字）：
+- 平手=0，平/半（主让）=-0.25，半球（主让）=-0.5，半/一（主让）=-0.75
+- 一球（主让）=-1，一/球半（主让）=-1.25，球半（主让）=-1.5
+- 平/半（客让）=0.25，半球（客让）=0.5，半/一（客让）=0.75，一球（客让）=1
+- "一球/球半"="一/球半"=-1.25（主让1.25球）
+无法识别的字段填null。`;
 
     const resp = await fetch(API_URL, {
       method: 'POST',
@@ -59,6 +64,7 @@ const Vision = (() => {
         'Content-Type': 'application/json',
         'x-api-key': key,
         'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true',
       },
       body: JSON.stringify({
         model: MODEL,
