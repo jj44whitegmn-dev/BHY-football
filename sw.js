@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ftb-v4';
+const CACHE_NAME = 'ftb-v5';
 const ASSETS = [
   './',
   './index.html',
@@ -11,6 +11,7 @@ const ASSETS = [
   './js/decision.js',
   './js/storage.js',
   './js/stats.js',
+  './js/vision.js',
   './js/ui.js',
 ];
 

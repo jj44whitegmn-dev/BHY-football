@@ -99,23 +99,78 @@
               <input id="s2-decay" type="number" class="form-input text-center" value="0.8" min="0.5" max="1.0" step="0.05">
             </div>
           </div>
-          <!-- 可选：平博水位 -->
-          <details>
-            <summary class="text-sm text-gray-500 font-medium py-1 cursor-pointer">
-              平博终盘水位（可选）
-              <span class="text-xs text-gray-400 ml-1">— 用于平局修正判断和亚盘信号自动计算</span>
-            </summary>
-            <div class="grid grid-cols-2 gap-3 mt-3">
-              <div>
-                <label class="form-label">终盘主水</label>
-                <input id="s2-pinn-home" type="number" class="form-input text-center" placeholder="如 1.92" step="0.01" min="1">
+          <!-- 亚盘盘口数据 -->
+          <div class="bg-gray-50 rounded-xl p-3 space-y-3">
+            <div class="flex items-center justify-between">
+              <span class="text-sm font-medium text-gray-600">亚盘盘口数据</span>
+              <span class="text-xs text-gray-400">截图识别或手动填写</span>
+            </div>
+
+            <!-- 隐藏文件输入 -->
+            <input type="file" id="vision-file-pinnacle" accept="image/*" class="hidden">
+            <input type="file" id="vision-file-william" accept="image/*" class="hidden">
+
+            <!-- 平博 Pinnacle -->
+            <div>
+              <div class="flex items-center justify-between mb-2">
+                <span class="text-xs font-semibold text-indigo-600">平博（Pinnacle）</span>
+                <button id="btn-vision-pinnacle" class="vision-btn">
+                  <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                  截图识别
+                </button>
               </div>
-              <div>
-                <label class="form-label">终盘客水</label>
-                <input id="s2-pinn-away" type="number" class="form-input text-center" placeholder="如 1.98" step="0.01" min="1">
+              <!-- 表头 -->
+              <div class="grid grid-cols-4 gap-1.5 mb-1 text-center">
+                <div class="text-xs text-gray-400"></div>
+                <div class="text-xs text-gray-400">盘口</div>
+                <div class="text-xs text-gray-400">主水</div>
+                <div class="text-xs text-gray-400">客水</div>
+              </div>
+              <!-- 初盘行 -->
+              <div class="grid grid-cols-4 gap-1.5 mb-1.5 items-center">
+                <div class="text-xs text-gray-500 text-center">初盘</div>
+                <input id="s2-pinn-ol" type="number" class="form-input text-center text-sm px-1" step="0.25" placeholder="-0.5">
+                <input id="s2-pinn-oh" type="number" class="form-input text-center text-sm px-1" step="0.01" min="1" placeholder="1.89">
+                <input id="s2-pinn-oa" type="number" class="form-input text-center text-sm px-1" step="0.01" min="1" placeholder="1.93">
+              </div>
+              <!-- 终盘行 -->
+              <div class="grid grid-cols-4 gap-1.5 items-center">
+                <div class="text-xs text-gray-500 text-center">终盘</div>
+                <input id="s2-pinn-cl" type="number" class="form-input text-center text-sm px-1" step="0.25" placeholder="-0.25">
+                <input id="s2-pinn-home" type="number" class="form-input text-center text-sm px-1" step="0.01" min="1" placeholder="1.92">
+                <input id="s2-pinn-away" type="number" class="form-input text-center text-sm px-1" step="0.01" min="1" placeholder="1.99">
+              </div>
+              <!-- 盘口中文标签 -->
+              <div id="s2-line-labels" class="hidden mt-1.5 grid grid-cols-4 gap-1.5 text-center">
+                <div></div>
+                <div id="s2-ol-label" class="text-xs text-indigo-500"></div>
+                <div></div>
+                <div></div>
+                <div></div>
+                <div id="s2-cl-label" class="text-xs text-indigo-500"></div>
               </div>
             </div>
-          </details>
+
+            <!-- 威廉希尔（S2用） -->
+            <details>
+              <summary class="flex items-center justify-between cursor-pointer py-0.5">
+                <span class="text-xs font-semibold text-gray-500">威廉希尔初盘 <span class="text-gray-400 font-normal">（S2分歧信号用）</span></span>
+                <button id="btn-vision-william" class="vision-btn" onclick="event.preventDefault()">
+                  <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                  截图识别
+                </button>
+              </summary>
+              <div class="grid grid-cols-4 gap-1.5 mt-2 items-center">
+                <div class="text-xs text-gray-500 text-center">初盘</div>
+                <div class="text-xs text-gray-400 text-center">—</div>
+                <input id="s2-will-oh" type="number" class="form-input text-center text-sm px-1" step="0.01" min="1" placeholder="1.83">
+                <input id="s2-will-oa" type="number" class="form-input text-center text-sm px-1" step="0.01" min="1" placeholder="1.91">
+              </div>
+            </details>
+
+            <!-- 自动信号预览 -->
+            <div id="s2-auto-signals" class="bg-white rounded-lg p-2 text-xs text-gray-600 border border-gray-100"><span class="text-gray-400">输入数据后自动计算信号预览</span></div>
+          </div>
           <!-- 否决模型实时预览 -->
           <div id="s2-veto-preview" class="hidden rounded-xl p-3 text-sm bg-indigo-50 border border-indigo-100"></div>
         </div>
@@ -268,6 +323,7 @@
   <script src="js/decision.js"></script>
   <script src="js/storage.js"></script>
   <script src="js/stats.js"></script>
+  <script src="js/vision.js"></script>
   <script src="js/ui.js"></script>
 </body>
 </html>

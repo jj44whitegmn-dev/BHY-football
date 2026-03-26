@@ -56,6 +56,25 @@ select.form-input { appearance: none; background-image: url("data:image/svg+xml,
 .btn-sm { min-height: 36px; padding: 6px 14px; font-size: 0.8rem; }
 .btn-danger { background: #fee2e2; color: #dc2626; }
 
+/* ---------- 截图识别按钮 ---------- */
+.vision-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: #6366f1;
+  background: #eef2ff;
+  border: 1px solid #c7d2fe;
+  border-radius: 20px;
+  cursor: pointer;
+  min-height: 28px;
+  transition: background 0.15s;
+}
+.vision-btn:active { background: #e0e7ff; }
+.vision-btn.loading { color: #a5b4fc; pointer-events: none; }
+
 /* ---------- 步骤指示器 ---------- */
 .step-dot {
   width: 32px;

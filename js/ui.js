@@ -98,6 +98,25 @@ const App = (() => {
       $(id) && $(id).addEventListener('input', updateAutoSignalPreview);
     });
 
+    // 步骤2：截图识别按钮
+    $('btn-vision-pinnacle') && $('btn-vision-pinnacle').addEventListener('click', () => {
+      $('vision-file-pinnacle').value = '';
+      $('vision-file-pinnacle').click();
+    });
+    $('btn-vision-william') && $('btn-vision-william').addEventListener('click', (e) => {
+      e.preventDefault();
+      $('vision-file-william').value = '';
+      $('vision-file-william').click();
+    });
+    $('vision-file-pinnacle') && $('vision-file-pinnacle').addEventListener('change', e => {
+      const file = e.target.files[0];
+      if (file) processVisionImage(file, 'pinnacle');
+    });
+    $('vision-file-william') && $('vision-file-william').addEventListener('change', e => {
+      const file = e.target.files[0];
+      if (file) processVisionImage(file, 'william_hill');
+    });
+
     // 步骤3：输入变化时实时计算
     ['s3-o-home','s3-o-draw','s3-o-away'].forEach(id => {
       $(id) && $(id).addEventListener('input', computeEV);
@@ -401,7 +420,7 @@ const App = (() => {
 
     const keys = Object.keys(autoResult);
     if (keys.length === 0) {
-      container.innerHTML = '<span class="text-gray-400 text-xs">输入数据后自动计算</span>';
+      container.innerHTML = '<span class="text-gray-400">输入数据后自动计算信号预览</span>';
       return;
     }
 
@@ -437,6 +456,42 @@ const App = (() => {
       }
     });
     updateAsianTotal();
+  }
+
+  // ── 截图识别处理 ──────────────────────────────────────────
+  async function processVisionImage(file, company) {
+    const btn = company === 'pinnacle' ? $('btn-vision-pinnacle') : $('btn-vision-william');
+    const origText = btn ? btn.innerHTML : '';
+    if (btn) { btn.classList.add('loading'); btn.textContent = '识别中…'; }
+
+    try {
+      const r = await Vision.recognizeAsian(file, company);
+
+      if (company === 'pinnacle') {
+        if (r.open_line  !== null && r.open_line  !== undefined) { const el = $('s2-pinn-ol');   if(el) { el.value = r.open_line;  el.dispatchEvent(new Event('input')); } }
+        if (r.open_home  !== null && r.open_home  !== undefined) { const el = $('s2-pinn-oh');   if(el) { el.value = r.open_home;  el.dispatchEvent(new Event('input')); } }
+        if (r.open_away  !== null && r.open_away  !== undefined) { const el = $('s2-pinn-oa');   if(el) { el.value = r.open_away;  el.dispatchEvent(new Event('input')); } }
+        if (r.close_line !== null && r.close_line !== undefined) { const el = $('s2-pinn-cl');   if(el) { el.value = r.close_line; el.dispatchEvent(new Event('input')); } }
+        if (r.close_home !== null && r.close_home !== undefined) { const el = $('s2-pinn-home'); if(el) { el.value = r.close_home; el.dispatchEvent(new Event('input')); } }
+        if (r.close_away !== null && r.close_away !== undefined) { const el = $('s2-pinn-away'); if(el) { el.value = r.close_away; el.dispatchEvent(new Event('input')); } }
+        computeVeto();
+      } else {
+        if (r.open_home !== null && r.open_home !== undefined) { const el = $('s2-will-oh'); if(el) { el.value = r.open_home; el.dispatchEvent(new Event('input')); } }
+        if (r.open_away !== null && r.open_away !== undefined) { const el = $('s2-will-oa'); if(el) { el.value = r.open_away; el.dispatchEvent(new Event('input')); } }
+      }
+
+      updateLineLabels();
+      updateAutoSignalPreview();
+
+      // 统计识别了几个字段
+      const filled = Object.values(r).filter(v => v !== null && v !== undefined).length;
+      toast(`识别完成，已填入 ${filled} 项数据`, 'success');
+
+    } catch (err) {
+      toast(err.message || '识别失败，请重试', 'error', 3500);
+    } finally {
+      if (btn) { btn.classList.remove('loading'); btn.innerHTML = origText; }
+    }
   }
 
   function updateAsianTotal() {
@@ -1017,13 +1072,31 @@ const App = (() => {
 
   // ── 设置页渲染 ─────────────────────────────────────────────
   function renderSettings() {
-    const saved = Storage.Settings.get();
-    const ev   = saved.EV_THRESHOLD   || Config.EV_THRESHOLD;
-    const gs   = saved.GAP_STRONG     || Config.GAP_STRONG;
-    const gw   = saved.GAP_WEAK       || Config.GAP_WEAK;
+    const saved   = Storage.Settings.get();
+    const ev      = saved.EV_THRESHOLD   || Config.EV_THRESHOLD;
+    const gs      = saved.GAP_STRONG     || Config.GAP_STRONG;
+    const gw      = saved.GAP_WEAK       || Config.GAP_WEAK;
+    const apiKey  = saved.claude_api_key || '';
+    const maskedKey = apiKey ? apiKey.slice(0, 16) + '…' + apiKey.slice(-4) : '';
 
     $('settings-content').innerHTML = `
       <div class="space-y-4">
+
+        <!-- Claude API Key -->
+        <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 space-y-3">
+          <h3 class="text-sm font-semibold text-gray-700">截图识别（Claude API）</h3>
+          <p class="text-xs text-gray-400">填入后可在步骤二点击「截图识别」按钮，自动从澳客截图中提取盘口和水位数据。</p>
+          <div>
+            <label class="form-label">Claude API Key</label>
+            <input id="cfg-api-key" type="password" class="form-input font-mono text-sm"
+              placeholder="sk-ant-api03-…" autocomplete="off" value="${apiKey}">
+            ${maskedKey ? `<p class="text-xs text-green-600 mt-1">已设置：${maskedKey}</p>` : ''}
+          </div>
+          <button class="btn btn-primary w-full" onclick="App.saveApiKey()">保存 API Key</button>
+          ${apiKey ? `<button class="btn btn-danger w-full" onclick="App.clearApiKey()">清除 API Key</button>` : ''}
+          <p class="text-xs text-gray-400">Key 仅保存在本设备浏览器中，不会上传任何服务器。</p>
+        </div>
+
         <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 space-y-3">
           <h3 class="text-sm font-semibold text-gray-700">EV 与概率差阈值</h3>
           <div>
@@ -1065,14 +1138,34 @@ const App = (() => {
     const gs = parseFloat($('cfg-gs')?.value);
     const gw = parseFloat($('cfg-gw')?.value);
     if (isNaN(ev) || isNaN(gs) || isNaN(gw)) { toast('请填写有效数值', 'error'); return; }
-    Storage.Settings.save({ EV_THRESHOLD: ev, GAP_STRONG: gs, GAP_WEAK: gw });
-    // 更新运行时 Config
+    const existing = Storage.Settings.get();
+    Storage.Settings.save({ ...existing, EV_THRESHOLD: ev, GAP_STRONG: gs, GAP_WEAK: gw });
     Config.EV_THRESHOLD = ev; Config.GAP_STRONG = gs; Config.GAP_WEAK = gw;
     toast('设置已保存', 'success');
   }
 
+  function saveApiKey() {
+    const key = ($('cfg-api-key')?.value || '').trim();
+    if (!key) { toast('请输入 API Key', 'error'); return; }
+    if (!key.startsWith('sk-ant-')) { toast('Key 格式不正确，应以 sk-ant- 开头', 'error'); return; }
+    const existing = Storage.Settings.get();
+    Storage.Settings.save({ ...existing, claude_api_key: key });
+    toast('API Key 已保存', 'success');
+    renderSettings();
+  }
+
+  function clearApiKey() {
+    const existing = Storage.Settings.get();
+    delete existing.claude_api_key;
+    Storage.Settings.save(existing);
+    toast('API Key 已清除', '');
+    renderSettings();
+  }
+
   function resetSettings() {
-    Storage.Settings.save({});
+    const existing = Storage.Settings.get();
+    const key = existing.claude_api_key; // 保留 API Key
+    Storage.Settings.save(key ? { claude_api_key: key } : {});
     Config.EV_THRESHOLD = 1.05; Config.GAP_STRONG = 0.06; Config.GAP_WEAK = 0.03;
     renderSettings();
     toast('已恢复默认设置', '');
@@ -1126,6 +1219,8 @@ const App = (() => {
     deleteRecord,
     saveBet,
     saveSettings,
+    saveApiKey,
+    clearApiKey,
     resetSettings,
     exportData,
     clearData,
