@@ -483,6 +483,12 @@ const App = (() => {
       updateLineLabels();
       updateAutoSignalPreview();
 
+      // S5 降盘异常：直接写入信号
+      if (r.s5 !== null && r.s5 !== undefined) {
+        setSignal('s5', r.s5);
+        updateAsianTotal();
+      }
+
       // 统计识别了几个字段
       const filled = Object.values(r).filter(v => v !== null && v !== undefined).length;
       toast(`识别完成，已填入 ${filled} 项数据`, 'success');
