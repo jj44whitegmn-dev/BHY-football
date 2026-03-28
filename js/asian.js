@@ -9,6 +9,12 @@ const Asian = (() => {
    */
   const SIGNALS = [
     {
+      id: 's0',
+      name: 'S0 CLV方向',
+      hasAuto: true,
+      desc: '平博开盘→关盘主水变化方向。主水持续下降（偏主强化）→+1；主水持续上升（偏客强化）→-1；变化<0.03或方向不明确→0。需提供平博初盘+终盘数据后自动计算。',
+    },
+    {
       id: 's1',
       name: 'S1 平博终盘重心',
       hasAuto: true,
@@ -53,16 +59,24 @@ const Asian = (() => {
    * 盘口负数 = 主队让球（主队热门）；盘口正数 = 客队让球。
    */
   function autoCalc({
-    pinnOpenLine  = null, pinnOpenHome  = null, pinnOpenAway  = null,
-    pinnCloseLine = null, pinnCloseHome = null, pinnCloseAway = null,
-    willOpenHome  = null, willOpenAway  = null,
+    pinnOpenLine   = null, pinnOpenHome   = null, pinnOpenAway   = null,
+    pinnCloseLine  = null, pinnCloseHome  = null, pinnCloseAway  = null,
+    willOpenHome   = null, willOpenAway   = null,
+    willCloseHome  = null, willCloseAway  = null,
   } = {}) {
     const result = {};
 
-    const hasClose = pinnCloseHome !== null && pinnCloseAway !== null;
-    const hasOpen  = pinnOpenHome  !== null && pinnOpenAway  !== null;
-    const hasLines = pinnOpenLine  !== null && pinnCloseLine !== null;
-    const hasWill  = willOpenHome  !== null && willOpenAway  !== null;
+    const hasClose     = pinnCloseHome  !== null && pinnCloseAway  !== null;
+    const hasOpen      = pinnOpenHome   !== null && pinnOpenAway   !== null;
+    const hasLines     = pinnOpenLine   !== null && pinnCloseLine  !== null;
+    const hasWillOpen  = willOpenHome   !== null && willOpenAway   !== null;
+    const hasWillClose = willCloseHome  !== null && willCloseAway  !== null;
+
+    // ── S0：CLV方向（平博开盘→关盘主水变化）────────────────────
+    if (pinnOpenHome !== null && pinnCloseHome !== null) {
+      const diff = pinnOpenHome - pinnCloseHome; // 正值=主水下降=资金偏主
+      result.s0 = diff > 0.03 ? 1 : diff < -0.03 ? -1 : 0;
+    }
 
     // ── S1：平博终盘重心 ─────────────────────────────────────
     if (hasClose) {
@@ -70,21 +84,22 @@ const Asian = (() => {
       result.s1 = d < -Config.WATER_DIFF_S1 ? 1 : d > Config.WATER_DIFF_S1 ? -1 : 0;
     }
 
-    // ── S2：公司分歧（平博 vs 威廉希尔初盘方向）───────────────
-    if (hasOpen && hasWill) {
-      // diff < 0 = 主水更低 = 偏主；diff > 0 = 客水更低 = 偏客
+    // ── S2：公司分歧（平博 vs 威廉希尔）────────────────────────
+    // 优先用终盘对比（关盘比对能看出分歧是否扩大或收敛）
+    // 无终盘时回退到初盘对比
+    const T = Config.WATER_DIFF_S2; // 0.10
+    if (hasWillClose && hasClose) {
+      const pDiff = pinnCloseHome - pinnCloseAway;
+      const wDiff = willCloseHome - willCloseAway;
+      const pinnH = pDiff < -T; const pinnA = pDiff > T;
+      const willH = wDiff < -T; const willA = wDiff > T;
+      result.s2 = (pinnH && willA) ? 1 : (pinnA && willH) ? -1 : 0;
+    } else if (hasOpen && hasWillOpen) {
       const pDiff = pinnOpenHome - pinnOpenAway;
       const wDiff = willOpenHome - willOpenAway;
-      const T = Config.WATER_DIFF_S2; // 0.10
-      const pinnH = pDiff < -T;  // 平博强烈偏主
-      const pinnA = pDiff >  T;  // 平博强烈偏客
-      const willH = wDiff < -T;
-      const willA = wDiff >  T;
-      if ((pinnH && willA) || (pinnA && willH)) {
-        result.s2 = pinnH ? 1 : -1; // 跟随平博方向
-      } else {
-        result.s2 = 0; // 同向或分歧不足
-      }
+      const pinnH = pDiff < -T; const pinnA = pDiff > T;
+      const willH = wDiff < -T; const willA = wDiff > T;
+      result.s2 = (pinnH && willA) ? 1 : (pinnA && willH) ? -1 : 0;
     }
 
     // ── S3：终盘水位绝对差 ───────────────────────────────────
@@ -142,13 +157,13 @@ const Asian = (() => {
    * 将亚盘总分（-5 到 +5）转为中文描述
    */
   function interpret(total) {
-    if (total >= 4)  return '亚盘强烈支持主队';
-    if (total >= 2)  return '亚盘偏主，信号较清晰';
-    if (total === 1) return '亚盘轻微偏主，信号偏弱';
+    if (total >= 5)  return '亚盘强烈支持主队';
+    if (total >= 3)  return '亚盘偏主，信号较清晰';
+    if (total >= 1)  return '亚盘轻微偏主，信号偏弱';
     if (total === 0) return '亚盘中性，无明确方向';
-    if (total === -1) return '亚盘轻微偏客，信号偏弱';
-    if (total >= -3) return '亚盘偏客，信号较清晰';
-    return '亚盘强烈支持客队';  // <= -4
+    if (total >= -2) return '亚盘轻微偏客，信号偏弱';
+    if (total >= -4) return '亚盘偏客，信号较清晰';
+    return '亚盘强烈支持客队';  // <= -5
   }
 
   return { SIGNALS, interpret, autoCalc, lineToLabel };

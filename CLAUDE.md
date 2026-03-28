@@ -1,11 +1,54 @@
-# CLAUDE.md — 足彩预测辅助系统 v3 开发规范
+# CLAUDE.md — 足彩预测辅助系统开发规范
 
 ## 项目概述
 
-纯前端 PWA，浏览器打开即用，辅助分析竞彩足球赔率价值。
-算法：衰减加权否决模型 + EV双重条件 + 亚盘五层信号 + 双重确认决策。
+本项目包含两个独立系统：
 
-详细算法规格见 `资料.md`，实现计划见 `plan.md`。
+### 前端 PWA（v3，已完成）
+纯前端浏览器应用，`index.html` 打开即用。
+算法：衰减加权否决模型 + EV双重条件 + 亚盘五层信号 + 双重确认决策。
+详细规格见 `资料.md` 和 `plan.md`。
+
+### Python CLI（V2，2026-03-27 新增）
+命令行分析记录工具，定位为**分析记录工具，非下注决策系统**。
+
+```
+python main.py              # 分析一场比赛
+python main.py --calibrate  # 历史数据校准（首次必须先跑）
+python main.py --stats      # 统计面板
+python main.py --update-clv # 赛后补录CLV
+python main.py --history    # 查看历史记录
+```
+
+文件结构：
+```
+main.py              # 主入口
+config.json          # 配置 + 校准参数（自动写入）
+records.json         # 分析记录（自动生成）
+modules/
+  veto_model.py      # 否决模型（衰减加权 + 平局修正 + Platt校准）
+  calibrator.py      # 历史数据校准（football-data.co.uk，五大联赛）
+  asian_signals.py   # 亚盘五层信号交互收集
+  ev_calculator.py   # EV计算与格式化
+  time_checker.py    # 时间窗口判断
+  recorder.py        # records.json CRUD
+  stats.py           # 统计面板
+data/historical/     # 历史CSV缓存（--calibrate 自动下载）
+```
+
+校准状态（2026-03-27）：
+- 数据：5193 场（英超/德甲/西甲/意甲/法甲，近3赛季）
+- 原始 Brier Score：0.662
+- 校准后 Brier Score：0.620（改善 6.3%，Platt Scaling）
+- J联赛在 football-data.co.uk 不可用，已从校准数据中排除
+
+注意事项：
+- 否决模型使用 Laplace 平滑（α=1）防止极端序列概率为0
+- 平局修正×1.15系数已移除：Platt Scaling已校准平局高估，修正条件仅作"⚑ 平局值得关注"标记，不再干预概率数值
+- S4/S5 在噪音区（距开球 < 2 小时）自动置0
+- Python CLI 不依赖 pandas/numpy，标准库 + 可选 scipy
+
+详细算法规格见 `足彩系统_V2升级指令_ClaudeCode.md`。
 
 ---
 
@@ -45,7 +88,8 @@ football/
 │   ├── decision.js      # 双重确认决策引擎（含平局专项规则）
 │   ├── storage.js       # localStorage CRUD（只做数据层）
 │   ├── ui.js            # 页面渲染、事件绑定、模块调度
-│   └── stats.js         # 统计分析（100场解锁）
+│   ├── stats.js         # 统计分析（无场次限制，有1条即可查看）
+│   └── vision.js        # Claude Vision API 截图识别模块
 ├── css/
 │   └── app.css          # Tailwind 补充样式
 ├── icons/               # PWA 图标
@@ -67,11 +111,39 @@ decision.js  ← 只做决策逻辑，不做 I/O，不操作 DOM
 storage.js   ← 只做 localStorage CRUD，不含分析逻辑
 ui.js        ← 调度层：渲染、绑定事件、调用各模块、调用 storage
 stats.js     ← 只做统计计算，依赖 storage，不操作 DOM
+vision.js    ← Claude Vision API 调用，纯异步，不操作 DOM
 ```
 
 - **veto.js / ev.js / asian.js / decision.js** 是纯函数模块，无副作用，无 DOM 操作
 - **storage.js** 不调用任何分析模块
 - **ui.js** 负责所有跨模块协调
+
+---
+
+## Vision 截图识别规范（vision.js）
+
+### 三张图分工
+
+| 截图 | 函数 | 提取内容 | AI直接计算信号 |
+|------|------|------|------|
+| 图1：平博完整时间轴（开盘） | `recognizeOpening(file)` | open_line/home/away + window_*(4-12h窗口) | **S5**（深V反转，仅4-12h区间） |
+| 图2：平博临盘视图（关盘前） | `recognizeClosing(file, pinnOpenResult)` | close_line/home/away + in_noise_zone | **S1/S3/S4**（噪音区S4强制=0） |
+| 图3：威廉希尔完整时间轴 | `recognizeWilliamTimeline(file, pinnOpenResult)` | wh_open/close数据 | **S2**（平博vs威廉初盘分歧） |
+
+### 数据传递规则
+- 上传图1后，`analysis.step2.pinnOpenResult` 保存初盘结果
+- 上传图2/图3时，自动将 `pinnOpenResult` 传入，供AI计算S4/S2
+- 上传顺序推荐：图1 → 图3 → 图2
+
+### 噪音区判断（双重）
+- **系统时钟**：距开球 < 2小时，`_noiseZone=true`，S4/S5在UI层强制=0
+- **AI识别**：`in_noise_zone=1`（来自closing结果），S4在Vision层强制=0
+- 两重保障任意一个触发即置0
+
+### 复盘统计（stats.js）
+- 无场次限制，有1条含赛果记录即可查看
+- 统计内容：整体命中率 / 各信号独立命中率 / 亚盘总分相关性 / 各联赛命中率 / CLV统计
+- 样本不足（<3场）时显示"样本不足（N场）"，不隐藏该项
 
 ---
 

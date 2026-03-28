@@ -1,0 +1,95 @@
+{
+  "generated_at": "2026-03-28T12:04:46.245057",
+  "total_matches": 5193,
+  "dim1_veto": {
+    "overall": {
+      "total": 5193,
+      "accuracy": 48.62314654342384
+    },
+    "home_pred": {
+      "total": 3692,
+      "accuracy": 50.21668472372698
+    },
+    "draw_pred": {
+      "total": 10,
+      "accuracy": 10.0
+    },
+    "away_pred": {
+      "total": 1491,
+      "accuracy": 44.93628437290409
+    }
+  },
+  "dim2_s1": {
+    "home": {
+      "total": 2461,
+      "accuracy": 43.55952864689151
+    },
+    "away": {
+      "total": 2257,
+      "accuracy": 29.508196721311474
+    },
+    "neutral": {
+      "total": 475,
+      "distribution": "48.2%/23.8%/28.0%"
+    }
+  },
+  "dim3_dual": {
+    "agree": {
+      "total": 2361,
+      "accuracy": 48.284625158831
+    },
+    "disagree": {
+      "total": 2347,
+      "accuracy": 48.78568385172561
+    },
+    "lift_vs_veto_overall": -0.3
+  },
+  "dim4_clv": {
+    "total": 2562,
+    "accuracy": 40.788446526151446,
+    "lift_vs_random": 7.5
+  },
+  "dim5_league": {
+    "英超": {
+      "veto_total": 1095,
+      "veto_accuracy": 50.95890410958904,
+      "dual_total": 498,
+      "dual_accuracy": 48.99598393574297
+    },
+    "德甲": {
+      "veto_total": 879,
+      "veto_accuracy": 48.80546075085324,
+      "dual_total": 403,
+      "dual_accuracy": 51.36476426799007
+    },
+    "西甲": {
+      "veto_total": 1098,
+      "veto_accuracy": 48.72495446265938,
+      "dual_total": 509,
+      "dual_accuracy": 49.115913555992144
+    },
+    "意甲": {
+      "veto_total": 1098,
+      "veto_accuracy": 47.44990892531876,
+      "dual_total": 510,
+      "dual_accuracy": 47.05882352941176
+    },
+    "法甲": {
+      "veto_total": 1023,
+      "veto_accuracy": 47.116324535679375,
+      "dual_total": 441,
+      "dual_accuracy": 45.12471655328798
+    }
+  },
+  "dim6_clv_veto": {
+    "agree": {
+      "total": 1361,
+      "accuracy": 48.86113152094049
+    },
+    "disagree": {
+      "total": 1196,
+      "accuracy": 41.63879598662207
+    },
+    "lift_vs_veto_overall": 0.2
+  }
+}

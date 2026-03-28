@@ -16,7 +16,8 @@ const App = (() => {
     step1: {},   // 基本信息
     step2: {},   // 战绩 + 水位 → vetoResult
     step3: {},   // 赔率 → evResult
-    step4: {},   // 亚盘信号值 {s1,s2,s3,s4,s5}
+    step4: {},          // 亚盘信号值 {s0,s1,s2,s3,s4,s5}
+    step4Sources: {},   // 信号来源：'ai'|'auto'|'manual'|undefined
     result: {},  // 最终决策对象
   };
 
@@ -61,6 +62,32 @@ const App = (() => {
     $('btn-new-analysis').classList.toggle('hidden', page === 'analysis');
   }
 
+  // ── 时间窗口检查 ───────────────────────────────────────────
+  let _noiseZone = false;  // 全局：当前是否处于噪音区
+
+  function _checkTimeWindow() {
+    const date = gv('s1-date');
+    const time = gv('s1-time');
+    if (!date || !time) return null;
+    const kickoff = new Date(`${date}T${time}:00`);
+    if (isNaN(kickoff)) return null;
+    const hours = (kickoff - Date.now()) / 3600000;
+    if (hours < 0)   return { code: 'started', autoZero: true,  label: '比赛已开始或结束',                                              cls: 'bg-red-50 text-red-700 border border-red-200' };
+    if (hours < 2)   return { code: 'noise',   autoZero: true,  label: `噪音区（距开球 ${hours.toFixed(1)} 小时）· S4/S5 自动置 0`,     cls: 'bg-red-50 text-red-700 border border-red-200' };
+    if (hours < 4)   return { code: 'usable',  autoZero: false, label: `可用窗口（距开球 ${hours.toFixed(1)} 小时）`,                    cls: 'bg-yellow-50 text-yellow-700 border border-yellow-200' };
+    if (hours <= 12) return { code: 'optimal', autoZero: false, label: `最优窗口（距开球 ${hours.toFixed(1)} 小时）`,                    cls: 'bg-green-50 text-green-700 border border-green-200' };
+    return               { code: 'early',   autoZero: false, label: `过早（距开球 ${hours.toFixed(1)} 小时，平博盘口可能尚未稳定）`,  cls: 'bg-yellow-50 text-yellow-700 border border-yellow-200' };
+  }
+
+  function _updateWindowStatus() {
+    const el = $('s1-window-status');
+    if (!el) return;
+    const w = _checkTimeWindow();
+    if (!w) { el.className = 'hidden'; el.textContent = ''; return; }
+    el.className = `text-xs px-3 py-2 rounded-lg mt-1 ${w.cls}`;
+    el.textContent = w.label;
+  }
+
   // ── 分析向导：初始化 ───────────────────────────────────────
   function initAnalysis() {
     // 填充联赛下拉
@@ -81,20 +108,24 @@ const App = (() => {
     $('btn-restart').addEventListener('click', restartAnalysis);
     $('btn-new-analysis').addEventListener('click', () => { showPage('analysis'); restartAnalysis(); });
 
+    // 实时更新时间窗口状态
+    $('s1-date') && $('s1-date').addEventListener('change', _updateWindowStatus);
+    $('s1-time') && $('s1-time').addEventListener('change', _updateWindowStatus);
+
     // 步骤2：输入变化时实时计算否决模型
     ['s2-home-seq','s2-away-seq','s2-n','s2-decay','s2-pinn-home','s2-pinn-away'].forEach(id => {
       $(id) && $(id).addEventListener('input', computeVeto);
     });
 
     // 步骤2：新增盘口/水位字段监听
-    ['s2-pinn-ol','s2-pinn-oh','s2-pinn-oa','s2-pinn-cl','s2-will-oh','s2-will-oa'].forEach(id => {
+    ['s2-pinn-ol','s2-pinn-oh','s2-pinn-oa','s2-pinn-cl','s2-will-oh','s2-will-oa','s2-will-cl'].forEach(id => {
       $(id) && $(id).addEventListener('input', () => {
         updateLineLabels();
         updateAutoSignalPreview();
       });
     });
-    // 终盘水位字段也触发自动信号预览
-    ['s2-pinn-home','s2-pinn-away'].forEach(id => {
+    // 终盘水位字段也触发自动信号预览（平博终盘 + 威廉最新盘）
+    ['s2-pinn-home','s2-pinn-away','s2-will-ch','s2-will-ca'].forEach(id => {
       $(id) && $(id).addEventListener('input', updateAutoSignalPreview);
     });
 
@@ -161,11 +192,32 @@ const App = (() => {
 
     // 如果到步骤4，自动填入可自动计算的信号，并展示市场解读
     if (n === 4) {
+      // 检查时间窗口，决定是否噪音区
+      const win = _checkTimeWindow();
+      _noiseZone = win ? win.autoZero : false;
+
+      // 更新步骤4顶部的时间窗口警告
+      const warnEl = $('s4-window-warning');
+      if (warnEl) {
+        if (win) {
+          warnEl.className = `rounded-xl p-3 text-xs leading-relaxed ${win.cls}`;
+          if (win.code === 'noise' || win.code === 'started') {
+            warnEl.innerHTML = `<strong>时间窗口：${win.label}</strong><br>S4 盘口背离、S5 降盘异常两项信号已自动置 0，无法手动修改。`;
+          } else if (win.code === 'early') {
+            warnEl.innerHTML = `<strong>时间窗口：${win.label}</strong><br>建议等盘口稳定后（开球前 4-12 小时）再分析 S4/S5 信号。`;
+          } else {
+            warnEl.innerHTML = `<strong>时间窗口：${win.label}</strong>`;
+          }
+          warnEl.classList.remove('hidden');
+        } else {
+          warnEl.classList.add('hidden');
+        }
+      }
+
       autoFillSignals();
       if (analysis.step2.market_summary) {
         const el = $('s4-market-summary');
         if (el) {
-          // 保留标题span，追加文字节点
           el.innerHTML = `<span class="font-semibold text-amber-700 block mb-1">市场解读参考</span>${analysis.step2.market_summary}`;
           el.classList.remove('hidden');
         }
@@ -234,8 +286,11 @@ const App = (() => {
         pinn_close_line: gn('s2-pinn-cl'),
         pinn_home:      gn('s2-pinn-home'),
         pinn_away:      gn('s2-pinn-away'),
-        will_open_home: gn('s2-will-oh'),
-        will_open_away: gn('s2-will-oa'),
+        will_open_home:  gn('s2-will-oh'),
+        will_open_away:  gn('s2-will-oa'),
+        will_close_home: gn('s2-will-ch'),
+        will_close_away: gn('s2-will-ca'),
+        will_close_line: gn('s2-will-cl'),
         vetoResult: analysis.step2.vetoResult,
       };
     }
@@ -274,12 +329,12 @@ const App = (() => {
       $('s2-away-label').textContent = r.away_seq_parsed.length ? `（${r.away_seq_parsed.length}场）` : '';
 
       const corrText = r.draw_correction_triggered
-        ? `<span class="font-semibold text-indigo-700">已触发平局修正（条件${r.correction_conditions_met.join('+')}）</span>`
-        : `<span class="text-gray-500">未触发平局修正</span>`;
+        ? `<span class="font-semibold text-indigo-700">⚑ 平局关注标记（条件 ${r.correction_conditions_met.join('+')}）</span>`
+        : `<span class="text-gray-400">未触发平局关注</span>`;
 
       $('s2-veto-preview').innerHTML = `
-        <div class="font-semibold text-indigo-800 mb-2 text-xs">否决模型预览</div>
-        <div class="grid grid-cols-3 gap-2 text-center mb-2">
+        <div class="font-semibold text-indigo-800 mb-2 text-xs">原始否决模型预览 <span class="text-gray-400 font-normal">（未校准）</span></div>
+        <div class="grid grid-cols-3 gap-2 text-center mb-1">
           <div class="bg-white rounded-lg p-2 border border-indigo-100">
             <div class="text-xs text-green-700 font-medium">主胜</div>
             <div class="text-lg font-bold text-green-700">${pct(r.p_home)}</div>
@@ -293,7 +348,7 @@ const App = (() => {
             <div class="text-lg font-bold text-red-600">${pct(r.p_away)}</div>
           </div>
         </div>
-        <div class="text-xs text-center">${corrText}</div>
+        <div class="text-xs text-center mt-1">${corrText}</div>
       `;
       $('s2-veto-preview').classList.remove('hidden');
     } catch(e) {
@@ -351,41 +406,58 @@ const App = (() => {
   function buildSignalCards() {
     const container = $('s4-signals');
     container.innerHTML = '';
+    analysis.step4Sources = {};
+
     Asian.SIGNALS.forEach(sig => {
+      const isTimeSensitive = sig.id === 's4' || sig.id === 's5';
+      const disabled = isTimeSensitive && _noiseZone;
       const card = document.createElement('div');
-      card.className = 'signal-card bg-white';
+      card.className = `signal-card bg-white${disabled ? ' opacity-50' : ''}`;
       card.innerHTML = `
         <div class="flex items-start justify-between gap-2">
           <div>
             <div class="text-sm font-semibold text-gray-800">
               ${sig.name}
               ${sig.hasAuto ? '<span class="signal-auto-badge">可自动</span>' : ''}
+              ${disabled ? '<span class="text-xs text-red-500 ml-1">（噪音区自动置0）</span>' : ''}
             </div>
             <div class="text-xs text-gray-500 mt-1">${sig.desc}</div>
           </div>
-          <div id="${sig.id}-val-display" class="signal-value-display sv-neu flex-shrink-0 mt-1">—</div>
+          <div class="flex flex-col items-center flex-shrink-0 mt-1 gap-0.5">
+            <div id="${sig.id}-val-display" class="signal-value-display ${disabled ? 'sv-neu' : 'sv-pending'}">${disabled ? '0' : '?'}</div>
+            <span id="${sig.id}-src-badge" class="signal-source-badge ${disabled ? 'badge-auto' : 'badge-pending'}">${disabled ? '自动' : '待输入'}</span>
+          </div>
         </div>
-        <div class="signal-btns" id="${sig.id}-btns">
-          <button class="signal-btn" data-sig="${sig.id}" data-val="1">+1 偏主</button>
-          <button class="signal-btn" data-sig="${sig.id}" data-val="0">0 中性</button>
-          <button class="signal-btn" data-sig="${sig.id}" data-val="-1">-1 偏客</button>
+        <div class="signal-btns${disabled ? '' : ' signal-btns-pending'}" id="${sig.id}-btns">
+          <button class="signal-btn${disabled ? ' disabled-btn' : ''}" data-sig="${sig.id}" data-val="1" ${disabled ? 'disabled' : ''}>+1 偏主</button>
+          <button class="signal-btn${disabled ? ' disabled-btn' : ''}" data-sig="${sig.id}" data-val="0" ${disabled ? 'disabled' : ''}>0 中性</button>
+          <button class="signal-btn${disabled ? ' disabled-btn' : ''}" data-sig="${sig.id}" data-val="-1" ${disabled ? 'disabled' : ''}>-1 偏客</button>
         </div>`;
       container.appendChild(card);
+
+      // 噪音区直接自动置0
+      if (disabled) {
+        analysis.step4[sig.id] = 0;
+        analysis.step4Sources[sig.id] = 'auto';
+      }
     });
 
-    // 绑定点击
-    container.querySelectorAll('.signal-btn').forEach(btn => {
+    // 绑定点击（只对非禁用按钮生效）
+    container.querySelectorAll('.signal-btn:not([disabled])').forEach(btn => {
       btn.addEventListener('click', () => {
         const sig = btn.dataset.sig;
         const val = parseInt(btn.dataset.val);
-        setSignal(sig, val);
+        setSignal(sig, val, 'manual');
         updateAsianTotal();
       });
     });
   }
 
-  function setSignal(sigId, val) {
+  function setSignal(sigId, val, source = 'manual') {
     analysis.step4[sigId] = val;
+    if (!analysis.step4Sources) analysis.step4Sources = {};
+    analysis.step4Sources[sigId] = source;
+
     // 更新按钮状态
     document.querySelectorAll(`[data-sig="${sigId}"]`).forEach(btn => {
       const bv = parseInt(btn.dataset.val);
@@ -396,8 +468,25 @@ const App = (() => {
     });
     // 更新数值圆圈
     const disp = $(`${sigId}-val-display`);
-    disp.textContent = val > 0 ? `+${val}` : String(val);
-    disp.className = `signal-value-display ${val > 0 ? 'sv-pos' : val < 0 ? 'sv-neg' : 'sv-neu'}`;
+    if (disp) {
+      disp.textContent = val > 0 ? `+${val}` : String(val);
+      disp.className = `signal-value-display ${val > 0 ? 'sv-pos' : val < 0 ? 'sv-neg' : 'sv-neu'}`;
+    }
+    // 更新来源角标
+    const badge = $(`${sigId}-src-badge`);
+    if (badge) {
+      const badgeMap = {
+        ai:     { cls: 'badge-ai',     text: 'AI✓' },
+        auto:   { cls: 'badge-auto',   text: '自动' },
+        manual: { cls: 'badge-manual', text: '手动' },
+      };
+      const b = badgeMap[source] || badgeMap.manual;
+      badge.className = `signal-source-badge ${b.cls}`;
+      badge.textContent = b.text;
+    }
+    // 移除待输入高亮（已有值了）
+    const btnsEl = $(`${sigId}-btns`);
+    if (btnsEl) btnsEl.classList.remove('signal-btns-pending');
   }
 
   // ── 市场解读展示 ──────────────────────────────────────────
@@ -432,6 +521,8 @@ const App = (() => {
       pinnCloseAway: gn('s2-pinn-away'),
       willOpenHome:  gn('s2-will-oh'),
       willOpenAway:  gn('s2-will-oa'),
+      willCloseHome: gn('s2-will-ch'),
+      willCloseAway: gn('s2-will-ca'),
     });
 
     const keys = Object.keys(autoResult);
@@ -440,7 +531,7 @@ const App = (() => {
       return;
     }
 
-    const sigNames = { s1:'S1重心', s2:'S2分歧', s3:'S3绝对差', s4:'S4背离' };
+    const sigNames = { s0:'S0 CLV', s1:'S1重心', s2:'S2分歧', s3:'S3绝对差', s4:'S4背离' };
     const items = keys.map(k => {
       const v = autoResult[k];
       const cls = v > 0 ? 'text-green-600' : v < 0 ? 'text-red-500' : 'text-gray-500';
@@ -464,11 +555,13 @@ const App = (() => {
       pinnCloseAway: s2.pinn_away       ?? gn('s2-pinn-away'),
       willOpenHome:  s2.will_open_home  ?? gn('s2-will-oh'),
       willOpenAway:  s2.will_open_away  ?? gn('s2-will-oa'),
+      willCloseHome: s2.will_close_home ?? gn('s2-will-ch'),
+      willCloseAway: s2.will_close_away ?? gn('s2-will-ca'),
     });
     // 自动填入尚未手动设置的信号
-    ['s1','s2','s3','s4'].forEach(k => {
+    ['s0','s1','s2','s3','s4'].forEach(k => {
       if (auto[k] !== undefined && analysis.step4[k] === undefined) {
-        setSignal(k, auto[k]);
+        setSignal(k, auto[k], 'auto');
       }
     });
     updateAsianTotal();
@@ -484,29 +577,44 @@ const App = (() => {
     if (btn) { btn.classList.add('loading'); btn.textContent = '识别中…'; }
 
     try {
-      const r = type === 'open'
-        ? await Vision.recognizeOpening(file, company)
-        : await Vision.recognizeClosing(file, company);
+      // 路由：平博开盘→recognizeOpening；平博临盘→recognizeClosing（传初盘结果供S4）；威廉→recognizeWilliamTimeline（传初盘结果供S2）
+      const pinnOpenResult = analysis.step2 ? analysis.step2.pinnOpenResult || null : null;
+
+      let r;
+      if (company === 'william_hill') {
+        r = await Vision.recognizeWilliamTimeline(file, pinnOpenResult);
+      } else if (type === 'open') {
+        r = await Vision.recognizeOpening(file);
+        // 保存初盘结果，供后续临盘/威廉调用
+        if (analysis.step2) analysis.step2.pinnOpenResult = r;
+      } else {
+        r = await Vision.recognizeClosing(file, pinnOpenResult);
+      }
 
       // 盘口值校验：必须是0.25的倍数且绝对值≤3，否则是列错位
       const isValidLine = v => v == null || (Math.abs(v) <= 3 && Math.abs(Math.round(v * 4) - v * 4) < 0.01);
 
       // 盘口识别错误时清空并警告
-      ['open_line','close_line'].forEach(k => {
+      ['open_line','close_line','wh_close_line'].forEach(k => {
         if (r[k] != null && !isValidLine(r[k])) {
-          toast(`盘口识别异常（值${r[k]}不是有效盘口），请手动填写盘口列`, 'error', 4000);
+          toast(`盘口识别异常（值${r[k]}不是有效盘口），请手动填写`, 'error', 4000);
           r[k] = null;
         }
       });
 
-      // 字段映射表：根据 company+type 填入对应输入框
+      // 数值字段映射表（填入输入框）
       const fieldMap = {
-        open_line:  company === 'pinnacle' ? 's2-pinn-ol'   : null,
-        open_home:  company === 'pinnacle' ? 's2-pinn-oh'   : 's2-will-oh',
-        open_away:  company === 'pinnacle' ? 's2-pinn-oa'   : 's2-will-oa',
-        close_line: 's2-pinn-cl',
-        close_home: 's2-pinn-home',
-        close_away: 's2-pinn-away',
+        open_line:     's2-pinn-ol',
+        open_home:     's2-pinn-oh',
+        open_away:     's2-pinn-oa',
+        close_line:    's2-pinn-cl',
+        close_home:    's2-pinn-home',
+        close_away:    's2-pinn-away',
+        wh_open_home:  's2-will-oh',
+        wh_open_away:  's2-will-oa',
+        wh_close_line: 's2-will-cl',
+        wh_close_home: 's2-will-ch',
+        wh_close_away: 's2-will-ca',
       };
 
       let filled = 0;
@@ -520,20 +628,34 @@ const App = (() => {
       updateLineLabels();
       updateAutoSignalPreview();
 
-      // S5 降盘异常（仅临盘截图提供）
+      // AI直接计算的信号值：直接设置，来源标记为'ai'
+      // S5：来自平博开盘（噪音区时_noiseZone已处理）
       if (r.s5 != null) {
-        setSignal('s5', r.s5);
-        updateAsianTotal();
+        const s5val = _noiseZone ? 0 : r.s5;
+        setSignal('s5', s5val, 'ai');
         filled++;
       }
+      // S1/S3/S4：来自平博临盘
+      for (const sig of ['s1', 's3', 's4']) {
+        if (r[sig] != null) { setSignal(sig, r[sig], 'ai'); filled++; }
+      }
+      // S2：来自威廉希尔时间轴
+      if (r.s2 != null) { setSignal('s2', r.s2, 'ai'); filled++; }
 
-      // 市场解读（仅临盘截图提供）
+      updateAsianTotal();
+
+      // 噪音区提示（AI识别到）
+      if (r.in_noise_zone === 1 && !_noiseZone) {
+        toast('AI检测到当前处于噪音区（赛前2小时内），S4已自动置0', 'warning', 3000);
+      }
+
+      // 市场解读（平博临盘截图识别结果）
       if (r.market_summary) {
         analysis.step2.market_summary = r.market_summary;
         showMarketSummary(r.market_summary);
       }
 
-      const typeLabel = type === 'open' ? '开盘' : '临盘';
+      const typeLabel = company === 'william_hill' ? '威廉时间轴' : type === 'open' ? '平博开盘' : '平博临盘';
       toast(`${typeLabel}识别完成，已填入 ${filled} 项数据`, 'success');
 
     } catch (err) {
@@ -584,8 +706,11 @@ const App = (() => {
       const v = sigs[s.id] !== undefined ? sigs[s.id] : 0;
       const cls = v > 0 ? 'sv-pos' : v < 0 ? 'sv-neg' : 'sv-neu';
       const dirLabel = v > 0 ? '偏主' : v < 0 ? '偏客' : '中性';
-      return `<div class="flex items-center justify-between py-1.5 border-b border-gray-50">
-        <span class="text-sm text-gray-700">${s.name.replace(/^S\d /,'')}</span>
+      const overlapNote = s.id === 's1'
+        ? '<span class="text-xs text-amber-600 ml-1">⚠️ 与否决模型存在信息重叠，仅供参考</span>'
+        : '';
+      return `<div class="flex items-center justify-between py-1.5 border-b border-gray-50 flex-wrap gap-y-0.5">
+        <span class="text-sm text-gray-700">${s.name.replace(/^S\d+ /,'')}${overlapNote}</span>
         <div class="flex items-center gap-2">
           <span class="signal-value-display ${cls}">${v >= 0 ? '+'+v : v}</span>
           <span class="text-xs text-gray-500">${dirLabel}</span>
@@ -622,7 +747,7 @@ const App = (() => {
 
       <!-- 否决模型 -->
       <div class="result-block">
-        <div class="result-block-header">否决模型</div>
+        <div class="result-block-header">原始否决模型（未校准）</div>
         <div class="result-block-body">
           <div class="prob-row">
             <div class="prob-cell bg-green-50">
@@ -639,7 +764,7 @@ const App = (() => {
             </div>
           </div>
           ${vr.draw_correction_triggered
-            ? `<p class="text-xs text-center text-indigo-600 mt-2">✦ 已触发平局修正（条件 ${vr.correction_conditions_met.join('+')}）</p>`
+            ? `<p class="text-xs text-center text-indigo-600 mt-2">⚑ 平局关注标记（条件 ${vr.correction_conditions_met.join('+')}）</p>`
             : ''}
         </div>
       </div>
@@ -664,7 +789,7 @@ const App = (() => {
 
       <!-- 亚盘信号 -->
       <div class="result-block">
-        <div class="result-block-header">亚盘五层信号</div>
+        <div class="result-block-header">亚盘六层信号</div>
         <div class="result-block-body">
           ${sigRows}
           <div class="flex items-center justify-between mt-2 pt-2">
@@ -682,6 +807,12 @@ const App = (() => {
         <div class="decision-level">${dec.level}</div>
         <div class="decision-text">${dec.text}</div>
         ${dec.detail ? `<div class="decision-detail">${dec.detail}</div>` : ''}
+      </div>
+
+      <!-- CLV提醒 -->
+      <div class="mt-3 px-3 py-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800">
+        <div class="font-semibold mb-1">赛后请补录平博关盘赔率（在记录页编辑）</div>
+        <div class="text-amber-700">CLV追踪是验证你是否有真实edge的唯一指标</div>
       </div>`;
   }
 
@@ -713,6 +844,7 @@ const App = (() => {
       ev:           er.ev,
       gap:          er.gap,
       asian_signals: {
+        s0: analysis.step4.s0 || 0,
         s1: analysis.step4.s1 || 0,
         s2: analysis.step4.s2 || 0,
         s3: analysis.step4.s3 || 0,
@@ -746,8 +878,14 @@ const App = (() => {
     $('s2-veto-preview').classList.add('hidden');
     $('s3-ev-preview').classList.add('hidden');
     $('s4-total-box').classList.add('hidden');
-    // 重建信号卡片（清空选中状态）
+    const wsEl = $('s1-window-status');
+    if (wsEl) { wsEl.className = 'hidden'; wsEl.textContent = ''; }
+    const wwEl = $('s4-window-warning');
+    if (wwEl) wwEl.classList.add('hidden');
+    _noiseZone = false;
+    // 重建信号卡片（清空选中状态和来源）
     analysis.step4 = {};
+    analysis.step4Sources = {};
     buildSignalCards();
     goToStep(1);
   }
@@ -840,7 +978,7 @@ const App = (() => {
     const info = { league: rec.league, date: rec.date, time: rec.time, home_team: rec.home_team, away_team: rec.away_team };
     const dec  = { level: decLevel, text: (rec.decision || '').replace(/^[★❌⚠️—]+ ?/,''), detail: '' };
 
-    const sigMap = { s1:'S1 平博重心', s2:'S2 公司分歧', s3:'S3 水位差值', s4:'S4 盘口背离', s5:'S5 降盘异常' };
+    const sigMap = { s0:'S0 CLV方向', s1:'S1 平博重心', s2:'S2 公司分歧', s3:'S3 水位差值', s4:'S4 盘口背离', s5:'S5 降盘异常' };
     const sigRows = Object.keys(sigMap).map(k => {
       const v = sigs[k] || 0;
       const cls = v > 0 ? 'sv-pos' : v < 0 ? 'sv-neg' : 'sv-neu';
@@ -952,68 +1090,140 @@ const App = (() => {
   // ── 复盘页渲染 ─────────────────────────────────────────────
   function renderReview() {
     const completed = Stats.getCompletedCount();
-    const total     = Storage.Records.getAll().length;
     const container = $('review-content');
 
-    if (!Stats.isUnlocked()) {
-      const pct = Math.round(completed / Config.STATS_UNLOCK_COUNT * 100);
+    if (completed === 0) {
       container.innerHTML = `
         <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 text-center">
           <div class="text-4xl mb-3">📊</div>
-          <p class="text-base font-semibold text-gray-800 mb-1">统计分析尚未解锁</p>
-          <p class="text-sm text-gray-500 mb-4">需要 <strong>100</strong> 条含实际结果的记录</p>
-          <div class="progress-bar-wrap mb-2">
-            <div class="progress-bar-fill" style="width:${pct}%"></div>
-          </div>
-          <p class="text-sm text-gray-500">当前：<strong>${completed}</strong> / 100 条</p>
-          <p class="text-xs text-gray-400 mt-2">共 ${total} 条记录，其中 ${total - completed} 条待回填</p>
+          <p class="text-base font-semibold text-gray-800 mb-1">暂无数据</p>
+          <p class="text-sm text-gray-500">完成第一场分析并回填赛果后即可查看统计</p>
         </div>`;
       return;
     }
 
     const s = Stats.compute();
-    if (!s) { container.innerHTML = '<p class="text-gray-400">数据不足</p>'; return; }
+    if (!s) { container.innerHTML = '<p class="text-gray-400 text-center py-8">暂无数据</p>'; return; }
 
-    const level3 = s.levelStats['★★★'] || {};
-    const level2 = s.levelStats['★★']  || {};
+    const MIN_SAMPLE = 3;
+
+    // 信号行：样本不足时显示"样本不足（N场）"
+    function sigRow(label, st) {
+      if (!st || st.total === 0) return `<div class="flex items-center justify-between mb-2">
+        <span class="text-sm text-gray-600">${label}</span>
+        <span class="text-xs text-gray-400">暂无数据</span></div>`;
+      if (st.total < MIN_SAMPLE) return `<div class="flex items-center justify-between mb-2">
+        <span class="text-sm text-gray-600">${label}</span>
+        <span class="text-xs text-gray-400">样本不足（${st.total}场）</span></div>`;
+      const acc = (st.accuracy * 100).toFixed(1);
+      return `<div class="flex items-center justify-between mb-2">
+        <span class="text-sm text-gray-600">${label}</span>
+        <span class="text-sm font-bold ${st.accuracy >= 0.5 ? 'text-green-600' : 'text-red-500'}">${acc}%（${st.total}场）</span></div>`;
+    }
+
+    // 亚盘总分相关性行
+    function corrRow(label, data) {
+      if (!data || data.count === 0) return `<div class="flex items-center justify-between mb-2">
+        <span class="text-sm text-gray-600">${label}</span>
+        <span class="text-xs text-gray-400">暂无数据</span></div>`;
+      if (data.accuracy === null) return `<div class="flex items-center justify-between mb-2">
+        <span class="text-sm text-gray-600">${label}</span>
+        <span class="text-xs text-gray-400">${data.count}场（无方向信号）</span></div>`;
+      if (data.count < MIN_SAMPLE) return `<div class="flex items-center justify-between mb-2">
+        <span class="text-sm text-gray-600">${label}</span>
+        <span class="text-xs text-gray-400">样本不足（${data.count}场）</span></div>`;
+      const acc = (data.accuracy * 100).toFixed(1);
+      return `<div class="flex items-center justify-between mb-2">
+        <span class="text-sm text-gray-600">${label}</span>
+        <span class="text-sm font-bold ${data.accuracy >= 0.5 ? 'text-green-600' : 'text-red-500'}">${acc}%（${data.count}场）</span></div>`;
+    }
+
+    const accDisplay = s.accuracy !== null ? `${(s.accuracy * 100).toFixed(1)}%` : '—';
+    const correctN   = s.accuracy !== null ? Math.round(s.accuracy * s.accuracyCount) : 0;
+    const accDetail  = s.accuracyCount > 0 ? `${correctN}/${s.accuracyCount}场` : '暂无推荐记录';
+
+    const leagueHtml = Object.entries(s.leagueStats)
+      .sort((a, b) => b[1].total - a[1].total)
+      .map(([lg, data]) => {
+        if (data.withRecommend === 0) return `<div class="flex items-center justify-between mb-2">
+          <span class="text-sm text-gray-600">${lg}</span>
+          <span class="text-xs text-gray-400">${data.total}场，无推荐记录</span></div>`;
+        if (data.withRecommend < MIN_SAMPLE) return `<div class="flex items-center justify-between mb-2">
+          <span class="text-sm text-gray-600">${lg}</span>
+          <span class="text-xs text-gray-400">样本不足（${data.withRecommend}场）</span></div>`;
+        const acc = (data.accuracy * 100).toFixed(1);
+        return `<div class="flex items-center justify-between mb-2">
+          <span class="text-sm text-gray-600">${lg}</span>
+          <span class="text-sm font-bold ${data.accuracy >= 0.5 ? 'text-green-600' : 'text-red-500'}">${data.withRecommend}场，${acc}%</span></div>`;
+      }).join('');
+
+    const clvHtml = s.clvStats
+      ? `<div class="flex items-center justify-between mb-2">
+          <span class="text-sm text-gray-600">平均CLV</span>
+          <span class="text-sm font-bold ${s.clvStats.avgClv >= 0 ? 'text-green-600' : 'text-red-500'}">${s.clvStats.avgClv >= 0 ? '+' : ''}${(s.clvStats.avgClv * 100).toFixed(1)}%</span>
+        </div>
+        <div class="flex items-center justify-between">
+          <span class="text-sm text-gray-600">正CLV场次</span>
+          <span class="text-sm font-bold text-green-600">${(s.clvStats.posCount / s.clvStats.count * 100).toFixed(1)}%（${s.clvStats.count}场）</span>
+        </div>`
+      : `<p class="text-xs text-gray-400">暂无CLV数据（需赛后补录平博关盘赔率）</p>`;
+
+    const MIN_SAMPLE_S45 = 20;
+    function sigRowS45(label, st) {
+      if (!st || st.total === 0) return `<div class="flex items-center justify-between mb-2">
+        <span class="text-sm text-gray-600">${label}</span>
+        <span class="text-xs text-gray-400">暂无数据</span></div>`;
+      if (st.total < MIN_SAMPLE_S45) return `<div class="flex items-center justify-between mb-2">
+        <span class="text-sm text-gray-600">${label}</span>
+        <span class="text-xs text-gray-400">样本不足（${st.total}场，建议≥20场）</span></div>`;
+      const acc = (st.accuracy * 100).toFixed(1);
+      return `<div class="flex items-center justify-between mb-2">
+        <span class="text-sm text-gray-600">${label}</span>
+        <span class="text-sm font-bold ${st.accuracy >= 0.5 ? 'text-green-600' : 'text-red-500'}">${acc}%（${st.total}场）</span></div>`;
+    }
+
+    const vetoAccDisplay = s.vetoAccuracy !== null ? `${(s.vetoAccuracy * 100).toFixed(1)}%` : '—';
 
     container.innerHTML = `
-      <div class="grid grid-cols-3 gap-3 mb-4">
-        <div class="stat-card">
-          <div class="stat-num">${(s.accuracy * 100).toFixed(1)}%</div>
-          <div class="stat-label">总体命中率</div>
+      <!-- ① CLV统计（最优先） -->
+      <div class="bg-white rounded-2xl border border-green-100 shadow-sm p-4 mb-4">
+        <h3 class="text-sm font-semibold text-green-700 mb-1">CLV 统计 <span class="text-xs font-normal text-gray-400 ml-1">核心指标 · 长期正CLV = 有真实edge</span></h3>
+        <p class="text-xs text-gray-400 mb-3">赛后补录平博关盘赔率后自动计算</p>
+        ${clvHtml}
+      </div>
+
+      <!-- ② S4/S5信号 + 亚盘总分≥3 -->
+      <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 mb-4">
+        <h3 class="text-sm font-semibold text-gray-700 mb-3">关键信号命中率</h3>
+        ${sigRowS45('S4 盘口水位背离', s.signalStats.s4)}
+        ${sigRowS45('S5 降盘异常反转', s.signalStats.s5)}
+        ${corrRow('亚盘总分 |≥3| 命中率', s.totalCorrelation.high)}
+      </div>
+
+      <!-- ③ 参考指标 -->
+      <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 mb-4">
+        <h3 class="text-sm font-semibold text-gray-700 mb-1">参考指标 <span class="text-xs font-normal text-gray-400 ml-1">供参考，不作为主要判断依据</span></h3>
+        <div class="flex items-center justify-between mb-2 mt-2">
+          <span class="text-sm text-gray-600">整体命中率（有推荐记录）</span>
+          <span class="text-sm font-bold ${s.accuracy !== null && s.accuracy >= 0.33 ? 'text-green-600' : 'text-gray-600'}">${accDisplay}（${accDetail}）</span>
         </div>
-        <div class="stat-card">
-          <div class="stat-num">${s.total}</div>
-          <div class="stat-label">已复盘场次</div>
+        <div class="flex items-center justify-between mb-3">
+          <span class="text-sm text-gray-600">否决模型方向命中率</span>
+          <span class="text-sm font-bold ${s.vetoAccuracy !== null && s.vetoAccuracy >= 0.33 ? 'text-green-600' : 'text-gray-600'}">${vetoAccDisplay}（${s.total}场）</span>
         </div>
-        <div class="stat-card">
-          <div class="stat-num">${((level3.accuracy||0)*100).toFixed(1)}%</div>
-          <div class="stat-label">★★★命中率</div>
+        <div class="border-t border-gray-100 pt-3">
+          ${sigRow('S0 CLV方向信号', s.signalStats.s0)}
+          ${sigRow('S1 平博重心方向', s.signalStats.s1)}
+          ${sigRow('S2 公司分歧信号', s.signalStats.s2)}
+          ${sigRow('S3 水位绝对差值', s.signalStats.s3)}
+          ${corrRow('亚盘总分 1-2 命中率', s.totalCorrelation.mid)}
         </div>
       </div>
 
+      <!-- 各联赛命中率 -->
       <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 mb-4">
-        <h3 class="text-sm font-semibold text-gray-700 mb-3">各等级命中率</h3>
-        ${['★★★','★★'].map(lv => {
-          const st = s.levelStats[lv] || {};
-          return `<div class="flex items-center justify-between mb-2">
-            <span class="text-sm text-gray-600">${lv} （${st.count||0}场）</span>
-            <span class="text-sm font-bold ${(st.accuracy||0)>=0.5?'text-green-600':'text-red-500'}">${((st.accuracy||0)*100).toFixed(1)}%</span>
-          </div>`;
-        }).join('')}
-      </div>
-
-      <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 mb-4">
-        <h3 class="text-sm font-semibold text-gray-700 mb-3">亚盘信号准确率</h3>
-        ${Object.keys(s.signalStats).map(k => {
-          const st = s.signalStats[k];
-          const names = { s1:'S1 平博重心', s2:'S2 公司分歧', s3:'S3 水位差值', s4:'S4 盘口背离', s5:'S5 降盘异常' };
-          return `<div class="flex items-center justify-between mb-2">
-            <span class="text-sm text-gray-600">${names[k]||k} （${st.count}场）</span>
-            <span class="text-sm font-bold ${st.accuracy>=0.5?'text-green-600':'text-red-500'}">${(st.accuracy*100).toFixed(1)}%</span>
-          </div>`;
-        }).join('')}
+        <h3 class="text-sm font-semibold text-gray-700 mb-3">各联赛命中率</h3>
+        ${leagueHtml || '<p class="text-xs text-gray-400">暂无数据</p>'}
       </div>`;
   }
 
@@ -1043,15 +1253,24 @@ const App = (() => {
       list.innerHTML = '<div class="empty-state"><div class="empty-icon">💰</div><div class="empty-text">还没有下注记录</div></div>';
       return;
     }
-    list.innerHTML = bets.map(b => `
+    list.innerHTML = bets.map(b => {
+      const isParlay = Array.isArray(b.legs);
+      const legsHtml = isParlay
+        ? b.legs.map(l => `<div class="text-xs text-gray-600">${l.match || '未知比赛'} · ${l.betType === '让球胜平负' ? '让球 ' : ''}${l.side || ''} @ ${parseFloat(l.odds).toFixed(2)}</div>`).join('')
+        : `<div class="text-sm text-gray-800">${b.match || '未知比赛'} · ${b.side || ''}</div>`;
+      const oddsLabel = isParlay
+        ? `${b.legs.length}串1 · 总赔率 ${(b.totalOdds||0).toFixed(3)}`
+        : `赔率 ${b.odds||0}`;
+      return `
       <div class="finance-card mb-3">
         <div class="flex items-center justify-between mb-1">
-          <span class="text-xs text-gray-400">${b.date || ''}</span>
+          <span class="text-xs text-gray-400">${b.date || ''}${isParlay && b.legs.length > 1 ? ' · 串关' : ''}</span>
           <span class="text-sm font-bold ${(b.profit||0)>=0?'text-green-600':'text-red-500'}">${(b.profit||0)>=0?'+':''}¥${(b.profit||0).toFixed(0)}</span>
         </div>
-        <div class="text-sm text-gray-800">${b.match || '未知比赛'} · ${b.side || ''}</div>
-        <div class="text-xs text-gray-500 mt-1">投入 ¥${b.stake||0} · 赔率 ${b.odds||0} · ${b.result==='win'?'中奖':'未中'}</div>
-      </div>`).join('');
+        ${legsHtml}
+        <div class="text-xs text-gray-500 mt-1">投入 ¥${b.stake||0} · ${oddsLabel} · ${b.result==='win'?'全中':'未中'}</div>
+      </div>`;
+    }).join('');
   }
 
   function initFinance() {
@@ -1059,61 +1278,132 @@ const App = (() => {
   }
 
   function openAddBet() {
-    $('modal-title').textContent = '添加下注记录';
+    window._betLegs = [{ match: '', betType: '胜平负', side: '主胜', odds: '' }];
+    window._betResult = null;
+    $('modal-title').textContent = '添加投注记录';
+    _renderBetForm();
+    openModal();
+  }
+
+  function _renderBetForm() {
+    const legs = window._betLegs;
+    const legRows = legs.map((leg, i) => {
+      const sideOpts = (leg.betType === '让球胜平负'
+        ? ['让主胜','让平','让客胜']
+        : ['主胜','平局','客胜']
+      ).map(s => `<option ${leg.side === s ? 'selected' : ''}>${s}</option>`).join('');
+      return `
+        <div class="bg-gray-50 rounded-xl p-3 space-y-2">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-medium text-gray-500">第${i + 1}场</span>
+            ${legs.length > 1 ? `<button onclick="App.removeBetLeg(${i})" class="text-red-400 text-xs">删除</button>` : ''}
+          </div>
+          <input class="form-input text-sm" placeholder="比赛描述（如：曼城 vs 阿森纳）"
+            data-leg="${i}" data-field="match" value="${leg.match}">
+          <div class="grid grid-cols-2 gap-2">
+            <select class="form-input text-sm" data-leg="${i}" data-field="betType"
+              onchange="App.switchBetType(${i}, this.value)">
+              <option ${leg.betType === '胜平负' ? 'selected' : ''}>胜平负</option>
+              <option ${leg.betType === '让球胜平负' ? 'selected' : ''}>让球胜平负</option>
+            </select>
+            <select class="form-input text-sm" data-leg="${i}" data-field="side">${sideOpts}</select>
+          </div>
+          <input type="number" class="form-input text-sm" min="1" step="0.01"
+            placeholder="赔率（如 1.85）" data-leg="${i}" data-field="odds" value="${leg.odds}">
+        </div>`;
+    }).join('');
+
+    const allHaveOdds = legs.every(l => parseFloat(l.odds) > 1);
+    const totalOdds = allHaveOdds ? legs.reduce((p, l) => p * parseFloat(l.odds), 1) : null;
+    const parlayLabel = legs.length === 1 ? '单关' : `${legs.length} 串 1`;
+
     $('modal-content').innerHTML = `
       <div class="space-y-3">
-        <div>
-          <label class="form-label">比赛描述</label>
-          <input id="bet-match" type="text" class="form-input" placeholder="如：曼城 vs 阿森纳">
-        </div>
         <div class="grid grid-cols-2 gap-3">
           <div>
             <label class="form-label">日期</label>
-            <input id="bet-date" type="date" class="form-input" value="${new Date().toISOString().slice(0,10)}">
+            <input id="bet-date" type="date" class="form-input" value="${new Date().toISOString().slice(0, 10)}">
           </div>
-          <div>
-            <label class="form-label">下注方向</label>
-            <select id="bet-side" class="form-input">
-              <option>主胜</option><option>平局</option><option>客胜</option>
-            </select>
-          </div>
-        </div>
-        <div class="grid grid-cols-2 gap-3">
           <div>
             <label class="form-label">投注金额 ¥</label>
             <input id="bet-stake" type="number" class="form-input" min="1" step="1">
           </div>
-          <div>
-            <label class="form-label">成交赔率</label>
-            <input id="bet-odds" type="number" class="form-input" min="1" step="0.01">
-          </div>
         </div>
+        <div>
+          <div class="flex items-center justify-between mb-2">
+            <label class="form-label mb-0">场次（${parlayLabel}）</label>
+            ${legs.length < 8 ? `<button onclick="App.addBetLeg()" class="btn btn-ghost btn-sm text-xs">＋ 添加场次</button>` : ''}
+          </div>
+          <div class="space-y-2">${legRows}</div>
+        </div>
+        ${totalOdds !== null ? `
+        <div class="bg-blue-50 rounded-xl p-3 text-center text-sm text-blue-700">
+          总赔率：<strong>${totalOdds.toFixed(3)}</strong>（${parlayLabel}）
+        </div>` : ''}
         <div>
           <label class="form-label">结果</label>
           <div class="grid grid-cols-2 gap-3">
-            <button id="bet-win" class="btn btn-ghost" onclick="document.getElementById('bet-win').classList.add('btn-primary');document.getElementById('bet-win').classList.remove('btn-ghost');document.getElementById('bet-lose').classList.remove('btn-primary');document.getElementById('bet-lose').classList.add('btn-ghost');window._betResult='win'">✓ 中奖</button>
-            <button id="bet-lose" class="btn btn-ghost" onclick="document.getElementById('bet-lose').classList.add('btn-primary');document.getElementById('bet-lose').classList.remove('btn-ghost');document.getElementById('bet-win').classList.remove('btn-primary');document.getElementById('bet-win').classList.add('btn-ghost');window._betResult='lose'">✗ 未中</button>
+            <button class="btn ${window._betResult === 'win' ? 'btn-primary' : 'btn-ghost'}"
+              onclick="App.setBetResult('win')">✓ 全中</button>
+            <button class="btn ${window._betResult === 'lose' ? 'btn-primary' : 'btn-ghost'}"
+              onclick="App.setBetResult('lose')">✗ 未中</button>
           </div>
         </div>
         <button class="btn btn-primary w-full mt-2" onclick="App.saveBet()">保存</button>
       </div>`;
-    window._betResult = null;
-    openModal();
+  }
+
+  function _collectLegsFromDom() {
+    window._betLegs.forEach((leg, i) => {
+      const get = (field) => document.querySelector(`[data-leg="${i}"][data-field="${field}"]`);
+      const matchEl = get('match'), oddsEl = get('odds');
+      if (matchEl) leg.match = matchEl.value;
+      if (oddsEl)  leg.odds  = oddsEl.value;
+    });
+  }
+
+  function addBetLeg() {
+    _collectLegsFromDom();
+    window._betLegs.push({ match: '', betType: '胜平负', side: '主胜', odds: '' });
+    _renderBetForm();
+  }
+
+  function removeBetLeg(i) {
+    _collectLegsFromDom();
+    window._betLegs.splice(i, 1);
+    _renderBetForm();
+  }
+
+  function switchBetType(i, betType) {
+    _collectLegsFromDom();
+    window._betLegs[i].betType = betType;
+    window._betLegs[i].side = betType === '让球胜平负' ? '让主胜' : '主胜';
+    _renderBetForm();
+  }
+
+  function setBetResult(result) {
+    _collectLegsFromDom();
+    window._betResult = result;
+    _renderBetForm();
   }
 
   function saveBet() {
+    _collectLegsFromDom();
     const stake  = parseFloat($('bet-stake')?.value) || 0;
-    const odds   = parseFloat($('bet-odds')?.value)  || 0;
+    const date   = $('bet-date')?.value || '';
     const result = window._betResult;
-    if (!stake || !odds) { toast('请填写金额和赔率', 'error'); return; }
-    if (!result) { toast('请选择中奖/未中', 'error'); return; }
-    const profit = result === 'win' ? stake * (odds - 1) : -stake;
-    Storage.Bets.add({
-      date:   $('bet-date')?.value || '',
-      match:  $('bet-match')?.value || '',
-      side:   $('bet-side')?.value || '',
-      stake, odds, result, profit,
-    });
+    const legs   = window._betLegs;
+
+    if (!stake) { toast('请填写投注金额', 'error'); return; }
+    if (!result) { toast('请选择全中/未中', 'error'); return; }
+    if (!legs.every(l => parseFloat(l.odds) > 1)) {
+      toast('请完善所有场次的赔率', 'error'); return;
+    }
+
+    const totalOdds = legs.reduce((p, l) => p * parseFloat(l.odds), 1);
+    const profit = result === 'win' ? stake * (totalOdds - 1) : -stake;
+
+    Storage.Bets.add({ date, type: 'parlay', legs, stake, totalOdds, result, profit });
     closeModal();
     toast('已保存', 'success');
     renderFinance();
@@ -1267,6 +1557,10 @@ const App = (() => {
     fillResult,
     deleteRecord,
     saveBet,
+    addBetLeg,
+    removeBetLeg,
+    switchBetType,
+    setBetResult,
     saveSettings,
     saveApiKey,
     clearApiKey,

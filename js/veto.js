@@ -79,41 +79,39 @@ const Veto = (() => {
     // 3. 交叉概率
     // P_home = 主队赢率 * (1 - 客队赢率)
     // P_away = 客队赢率 * (1 - 主队赢率)
-    // P_draw = (主队平率 + 客队平率) / 2
+    // P_draw = 按实际场次数加权平均（n_home=n_away时与简单平均等价）
+    const n_home = home_seq_parsed.length;
+    const n_away = away_seq_parsed.length;
     let p_home = pH.win * (1 - pA.win);
     let p_away = pA.win * (1 - pH.win);
-    let p_draw = (pH.draw + pA.draw) / 2;
+    let p_draw = (pH.draw * n_home + pA.draw * n_away) / (n_home + n_away);
 
-    // 4. 归一化
+    // 4. 归一化 → 原始概率
     let total = p_home + p_draw + p_away;
     if (total > 0) {
       p_home /= total;
       p_draw /= total;
       p_away /= total;
     } else {
-      // 没有有效数据时均匀分布
       p_home = 1 / 3;
       p_draw = 1 / 3;
       p_away = 1 / 3;
     }
 
-    // 5. 检查平局修正条件 A/B/C
+    // 5. 检查平局修正条件 A/B/C（仅作标记，不改变概率数值）
     const correction_conditions_met = [];
 
-    // 条件 A：联赛平局率高于阈值
     const leagueDrawRate = Config.LEAGUE_DRAW_RATES[league] ?? Config.LEAGUE_DRAW_RATES['其他'];
     if (leagueDrawRate > Config.DRAW_RATE_THRESHOLD) {
       correction_conditions_met.push('A');
     }
 
-    // 条件 B：主客队最近5场平局数合计 >= 阈值
     const homeDraws5 = _countDrawsInLast5(home_seq_parsed);
     const awayDraws5 = _countDrawsInLast5(away_seq_parsed);
     if (homeDraws5 + awayDraws5 >= Config.DRAW_COUNT_THRESHOLD) {
       correction_conditions_met.push('B');
     }
 
-    // 条件 C：平博主客水位差 < 平局水位差阈值
     if (pinnHomeWater !== null && pinnAwayWater !== null) {
       const diff = Math.abs(pinnHomeWater - pinnAwayWater);
       if (diff < Config.WATER_DIFF_DRAW) {
@@ -121,21 +119,9 @@ const Veto = (() => {
       }
     }
 
-    // 6. 满足 >=2 个条件时应用平局修正
-    let draw_correction_triggered = false;
-    if (correction_conditions_met.length >= 2) {
-      p_draw *= Config.DRAW_CORRECTION_FACTOR;
-      // 重新归一化
-      const total2 = p_home + p_draw + p_away;
-      if (total2 > 0) {
-        p_home /= total2;
-        p_draw /= total2;
-        p_away /= total2;
-      }
-      draw_correction_triggered = true;
-    }
+    const draw_correction_triggered = correction_conditions_met.length >= 2;
 
-    // 7. 返回结果
+    // 6. 直接返回原始概率（未校准）
     return {
       p_home,
       p_draw,
