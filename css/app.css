@@ -421,6 +421,24 @@ details > summary::after {
 details[open] > summary::after { transform: translateY(-50%) rotate(180deg); }
 
 /* ---------- 辅助 ---------- */
+/* ---------- 操作信号框 ---------- */
+.action-signal-box {
+  border-radius: 14px;
+  padding: 14px 16px;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.action-signal-box.signal-buy   { background: #dcfce7; border: 2px solid #22c55e; }
+.action-signal-box.signal-small { background: #fef9c3; border: 2px solid #eab308; }
+.action-signal-box.signal-no    { background: #fee2e2; border: 2px solid #ef4444; }
+.action-signal-box.signal-skip  { background: #f3f4f6; border: 2px solid #d1d5db; }
+.action-signal-icon  { font-size: 1.6rem; line-height: 1; flex-shrink: 0; }
+.action-signal-main  { font-size: 1.05rem; font-weight: 700; color: #1f2937; }
+.action-signal-sub   { font-size: 0.75rem; color: #6b7280; margin-top: 2px; }
+.badge-parlay { background: #dcfce7; color: #15803d; }
+
 .text-green { color: #16a34a; }
 .text-red   { color: #dc2626; }
 .text-yellow{ color: #d97706; }

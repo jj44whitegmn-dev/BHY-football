@@ -33,7 +33,30 @@ const Decision = (() => {
    *   text:      简短描述
    *   detail:    详情字符串
    */
+  /**
+   * _getActionSignal(level, recommend)
+   * 方案A：🟢=★★★（parlay优先）/ 🟡=★★（补充，不建议入串）/ 🔴=冲突 / ⚫=跳过
+   */
+  function _getActionSignal(level, recommend) {
+    if (level === '★★★' && recommend !== null) {
+      return { action_signal: '建议买入', model_bet_flag: true, parlay_eligible: true };
+    }
+    if (level === '★★' && recommend !== null) {
+      return { action_signal: '可小额参考', model_bet_flag: false, parlay_eligible: false };
+    }
+    if (level === '❌' || level === '⚠️') {
+      return { action_signal: '不建议买入', model_bet_flag: false, parlay_eligible: false };
+    }
+    return { action_signal: '跳过', model_bet_flag: false, parlay_eligible: false };
+  }
+
   function decide(evResult, asianTotal) {
+    const result = _decide(evResult, asianTotal);
+    const sig = _getActionSignal(result.level, result.recommend);
+    return { ...result, ...sig };
+  }
+
+  function _decide(evResult, asianTotal) {
     const { judgments, bestSide } = evResult;
 
     // ── 平局专项 ─────────────────────────────────────────────────────

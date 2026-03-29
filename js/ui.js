@@ -802,6 +802,26 @@ const App = (() => {
         </div>
       </div>
 
+      <!-- 操作信号（最终指令，最显眼） -->
+      ${(() => {
+        const sig = dec.action_signal || '跳过';
+        const clsMap  = { '建议买入':'signal-buy', '可小额参考':'signal-small', '不建议买入':'signal-no', '跳过':'signal-skip' };
+        const iconMap = { '建议买入':'🟢', '可小额参考':'🟡', '不建议买入':'🔴', '跳过':'⚫' };
+        const parlayMap = {
+          '建议买入':   '✅ 适合入串（★★★ 高置信度）',
+          '可小额参考': '❌ 不建议单独入串，可作为配腿（★★）',
+          '不建议买入': '❌ 不入串',
+          '跳过':       '❌ 不入串',
+        };
+        return `<div class="action-signal-box ${clsMap[sig]}">
+          <div class="action-signal-icon">${iconMap[sig]}</div>
+          <div class="flex-1">
+            <div class="action-signal-main">操作信号：${sig}</div>
+            <div class="action-signal-sub">${parlayMap[sig]}</div>
+          </div>
+        </div>`;
+      })()}
+
       <!-- 最终决策 -->
       <div class="decision-box ${levelCls[dec.level] || 'level-skip'}">
         <div class="decision-level">${dec.level}</div>
@@ -877,11 +897,14 @@ const App = (() => {
       },
       decision:        `${dec.level} ${dec.text}`,
       recommend:       dec.recommend,
+      action_signal:   dec.action_signal   || '跳过',
+      model_bet_flag:  dec.model_bet_flag  || false,
+      parlay_eligible: dec.parlay_eligible || false,
       analysis_window: (() => { const w = _checkTimeWindow(); return w ? w.code : 'unknown'; })(),
       model_version:   Config.MODEL_VERSION,
-      clv_tracking:    null,     // 赛后补录：{ bet_side, buy_odds, close_odds, clv }
-      betted:          false,    // 是否实际下注
-      bet_selection:   null,     // 下注选项
+      clv_tracking:    null,
+      betted:          false,
+      bet_selection:   null,
       actual_result:   '',
       is_correct:      null,
       notes:           '',
@@ -934,6 +957,9 @@ const App = (() => {
       const resultBadge = rec.actual_result
         ? `<span class="badge ${rec.is_correct === true ? 'badge-correct' : rec.is_correct === false ? 'badge-wrong' : 'badge-gray'}">${rec.actual_result}${rec.is_correct === true ? ' ✓' : rec.is_correct === false ? ' ✗' : ''}</span>`
         : `<span class="badge badge-pending">待回填</span>`;
+      const actionIcon = { '建议买入':'🟢', '可小额参考':'🟡', '不建议买入':'🔴', '跳过':'⚫' }[rec.action_signal] || '⚫';
+      const parlayBadge = rec.parlay_eligible
+        ? `<span class="badge badge-parlay">✅ 可入串</span>` : '';
       return `
         <div class="record-card" onclick="App.openRecord(${rec.id})">
           <div class="record-header">
@@ -943,7 +969,8 @@ const App = (() => {
           <div class="record-teams">${rec.home_team} <span class="text-gray-400 font-normal text-sm">vs</span> ${rec.away_team}</div>
           <div class="record-meta">
             <span class="badge badge-league">${rec.league || ''}</span>
-            <span class="decision-mini ${miniCls}">${rec.decision || '—'}</span>
+            <span class="decision-mini ${miniCls}">${actionIcon} ${rec.decision || '—'}</span>
+            ${parlayBadge}
           </div>
         </div>`;
     }).join('');
@@ -1069,6 +1096,26 @@ const App = (() => {
             <p class="text-xs text-gray-500 mt-2 text-center">${Asian.interpret(total)}</p>
           </div>
         </div>
+
+        <!-- 操作信号 -->
+        ${(() => {
+          const sig = rec.action_signal || '跳过';
+          const clsMap  = { '建议买入':'signal-buy','可小额参考':'signal-small','不建议买入':'signal-no','跳过':'signal-skip' };
+          const iconMap = { '建议买入':'🟢','可小额参考':'🟡','不建议买入':'🔴','跳过':'⚫' };
+          const parlayMap = {
+            '建议买入':   '✅ 适合入串（★★★）',
+            '可小额参考': '❌ 可作为配腿（★★）',
+            '不建议买入': '❌ 不入串',
+            '跳过':       '❌ 不入串',
+          };
+          return `<div class="action-signal-box ${clsMap[sig]}">
+            <div class="action-signal-icon">${iconMap[sig]}</div>
+            <div class="flex-1">
+              <div class="action-signal-main">操作信号：${sig}</div>
+              <div class="action-signal-sub">${parlayMap[sig]}</div>
+            </div>
+          </div>`;
+        })()}
 
         <!-- 决策 -->
         <div class="decision-box ${levelCls[decLevel]||'level-skip'}">
