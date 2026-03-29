@@ -17,7 +17,7 @@ const Vision = (() => {
     qwen: {
       label:   '通义千问（推荐，国内直连）',
       keyName: 'qwen_api_key',
-      model:   'qwen-vl-plus',
+      model:   'qwen-vl-max',
       baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions',
     },
     gemini: {
