@@ -126,13 +126,29 @@ const Stats = (() => {
     });
     const vetoAccuracy = completed.length > 0 ? vetoCorrect.length / completed.length : null;
 
-    // ── CLV 统计（需赛后补录关盘赔率）────────────────────────────────
-    const withClv = completed.filter(r => typeof r.clv === 'number');
-    const clvStats = withClv.length > 0 ? {
-      count:    withClv.length,
-      avgClv:   withClv.reduce((s, r) => s + r.clv, 0) / withClv.length,
-      posCount: withClv.filter(r => r.clv > 0).length,
+    // ── CLV 统计 ─────────────────────────────────────────────────────
+    // 方式一：方向验证（平博关盘方向 vs 下注方向）
+    const withDir = completed.filter(r =>
+      r.clv_tracking && r.clv_tracking.pinn_direction && r.clv_tracking.bet_side
+    );
+    const dirMatch    = withDir.filter(r => r.clv_tracking.direction_match === true);
+    const dirMismatch = withDir.filter(r => r.clv_tracking.direction_match === false);
+    const dirStats = withDir.length > 0 ? {
+      total:        withDir.length,
+      matchCount:   dirMatch.length,
+      mismatchCount: dirMismatch.length,
+      matchRate:    dirMatch.length / withDir.length,
     } : null;
+
+    // 方式二：体彩内部CLV（可选，仅有 tc_clv 的记录）
+    const withTcClv = completed.filter(r => r.clv_tracking && typeof r.clv_tracking.tc_clv === 'number');
+    const tcClvStats = withTcClv.length > 0 ? {
+      count:   withTcClv.length,
+      avgClv:  withTcClv.reduce((s, r) => s + (r.clv_tracking.tc_clv - 1), 0) / withTcClv.length,
+      posCount: withTcClv.filter(r => r.clv_tracking.tc_clv > 1).length,
+    } : null;
+
+    const clvStats = (dirStats || tcClvStats) ? { dirStats, tcClvStats } : null;
 
     return {
       total,

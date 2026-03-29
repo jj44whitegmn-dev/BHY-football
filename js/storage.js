@@ -82,24 +82,40 @@ const Storage = (() => {
     },
 
     /**
-     * setClv(id, betSide, buyOdds, closeOdds) — 补录CLV数据
-     * CLV = buyOdds / closeOdds（>1表示跑赢关盘线）
-     * clv_percent = (CLV - 1) * 100
+     * setClv(id, data) — 补录CLV数据
+     * 方式一（主要）：方向验证
+     *   data.betSide        = 你的下注方向（主胜/平局/客胜）
+     *   data.pinnDirection  = 平博关盘方向（赔率最低项）
+     *   → direction_match = betSide === pinnDirection
+     * 方式二（可选）：体彩内部赔率追踪
+     *   data.tcBuy          = 买入时体彩赔率（押注选项的赔率）
+     *   data.tcClose        = 体彩关盘赔率（同选项关盘赔率）
+     *   → tc_clv = tcBuy / tcClose（>1表示买到更好的价格）
      */
-    setClv(id, betSide, buyOdds, closeOdds) {
+    setClv(id, { betSide, pinnDirection, tcBuy, tcClose }) {
       const all = this.getAll();
       const idx = all.findIndex(r => r.id === id);
       if (idx < 0) return;
-      const clv = buyOdds / closeOdds;
+
+      const direction_match = !!pinnDirection && betSide === pinnDirection;
+      const tc_clv = (tcBuy > 1 && tcClose > 1) ? tcBuy / tcClose : null;
+
       all[idx] = {
         ...all[idx],
         bet_selection: betSide,
         betted: true,
-        clv_tracking: { bet_side: betSide, buy_odds: buyOdds, close_odds: closeOdds, clv },
-        clv: clv - 1,   // 百分比形式，正值=跑赢关盘线
+        clv_tracking: {
+          bet_side:         betSide,
+          pinn_direction:   pinnDirection || null,
+          direction_match:  !!pinnDirection ? direction_match : null,
+          tc_buy:           tcBuy || null,
+          tc_close:         tcClose || null,
+          tc_clv,
+        },
+        clv: tc_clv ? tc_clv - 1 : null,  // 体彩CLV百分比（可null）
       };
       _write(KEYS.records, all);
-      return clv;
+      return { direction_match, tc_clv };
     },
 
     /**

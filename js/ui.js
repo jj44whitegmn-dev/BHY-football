@@ -1081,29 +1081,42 @@ const App = (() => {
         <!-- CLV补录 -->
         ${rec.clv_tracking
           ? `<div class="bg-green-50 border border-green-200 rounded-xl p-3 mt-3">
-              <div class="text-xs font-semibold text-green-700 mb-1">CLV已补录</div>
-              <div class="flex justify-between text-xs text-gray-600">
-                <span>投注：${rec.clv_tracking.bet_side} @ ${rec.clv_tracking.buy_odds.toFixed(3)}</span>
-                <span>平博关盘：${rec.clv_tracking.close_odds.toFixed(3)}</span>
+              <div class="text-xs font-semibold text-green-700 mb-2">CLV已补录</div>
+              ${rec.clv_tracking.pinn_direction ? `
+              <div class="flex items-center justify-between text-sm mb-1">
+                <span class="text-gray-600">平博关盘方向</span>
+                <span class="font-semibold">${rec.clv_tracking.pinn_direction}</span>
               </div>
-              <div class="text-center mt-1 font-bold ${rec.clv >= 0 ? 'text-green-600' : 'text-red-500'}">
-                CLV ${rec.clv >= 0 ? '+' : ''}${(rec.clv * 100).toFixed(1)}%
-                <span class="text-xs font-normal text-gray-500 ml-1">${rec.clv >= 0 ? '跑赢关盘线' : '跑输关盘线'}</span>
-              </div>
+              <div class="flex items-center justify-between text-sm mb-2">
+                <span class="text-gray-600">方向验证</span>
+                <span class="font-bold ${rec.clv_tracking.direction_match ? 'text-green-600' : 'text-red-500'}">
+                  ${rec.clv_tracking.direction_match ? '✓ 跟上聪明钱' : '✗ 与聪明钱相反'}
+                </span>
+              </div>` : ''}
+              ${rec.clv_tracking.tc_clv != null ? `
+              <div class="flex items-center justify-between text-sm border-t border-green-100 pt-2 mt-1">
+                <span class="text-gray-600">体彩CLV（${rec.clv_tracking.tc_buy?.toFixed(2)} / ${rec.clv_tracking.tc_close?.toFixed(2)}）</span>
+                <span class="font-bold ${rec.clv_tracking.tc_clv >= 1 ? 'text-green-600' : 'text-red-500'}">
+                  ${rec.clv_tracking.tc_clv >= 1 ? '+' : ''}${((rec.clv_tracking.tc_clv - 1) * 100).toFixed(1)}%
+                </span>
+              </div>` : ''}
             </div>`
           : `<div class="bg-amber-50 border border-amber-200 rounded-xl p-3 mt-3">
               <div class="text-xs font-semibold text-amber-700 mb-2">补录CLV（赛后填写）</div>
-              <div class="grid grid-cols-3 gap-1.5 mb-2">
-                <select id="clv-side-${id}" class="col-span-3 border border-gray-200 rounded-lg px-2 py-1.5 text-sm">
-                  <option value="">投注选项</option>
-                  <option value="主胜">主胜</option>
-                  <option value="平局">平局</option>
-                  <option value="客胜">客胜</option>
+              <div class="space-y-2 mb-3">
+                <select id="clv-side-${id}" class="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm">
+                  <option value="">你的下注方向</option>
+                  <option value="主胜">主胜</option><option value="平局">平局</option><option value="客胜">客胜</option>
                 </select>
-                <input id="clv-buy-${id}" type="number" step="0.01" placeholder="买入赔率" class="col-span-3 border border-gray-200 rounded-lg px-2 py-1.5 text-sm">
-                <input id="clv-close-${id}" type="number" step="0.01" placeholder="平博关盘赔率" class="col-span-3 border border-gray-200 rounded-lg px-2 py-1.5 text-sm">
+                <select id="clv-pinn-${id}" class="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm">
+                  <option value="">平博关盘方向（赔率最低项）</option>
+                  <option value="主胜">主胜</option><option value="平局">平局</option><option value="客胜">客胜</option>
+                </select>
+                <div class="text-xs text-gray-400 pt-1">体彩内部追踪（可选）</div>
+                <input id="clv-tc-buy-${id}" type="number" step="0.01" min="1" placeholder="体彩买入赔率（押注选项）" class="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm">
+                <input id="clv-tc-close-${id}" type="number" step="0.01" min="1" placeholder="体彩关盘赔率（同选项）" class="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm">
               </div>
-              <button onclick="App.saveClv(${id})" class="btn btn-primary w-full text-sm">计算并保存CLV</button>
+              <button onclick="App.saveClv(${id})" class="btn btn-primary w-full text-sm">保存CLV</button>
             </div>`
         }
 
@@ -1114,15 +1127,18 @@ const App = (() => {
 
   function saveClv(id) {
     const side  = (document.getElementById(`clv-side-${id}`) || {}).value;
-    const buy   = parseFloat((document.getElementById(`clv-buy-${id}`) || {}).value);
-    const close = parseFloat((document.getElementById(`clv-close-${id}`) || {}).value);
-    if (!side)         { toast('请选择投注选项', 'error'); return; }
-    if (!(buy > 1))    { toast('买入赔率无效（需>1）', 'error'); return; }
-    if (!(close > 1))  { toast('关盘赔率无效（需>1）', 'error'); return; }
-    const clv = Storage.Records.setClv(id, side, buy, close);
+    const pinn  = (document.getElementById(`clv-pinn-${id}`) || {}).value;
+    const tcBuy   = parseFloat((document.getElementById(`clv-tc-buy-${id}`) || {}).value) || null;
+    const tcClose = parseFloat((document.getElementById(`clv-tc-close-${id}`) || {}).value) || null;
+    if (!side)  { toast('请选择你的下注方向', 'error'); return; }
+    if (!pinn)  { toast('请选择平博关盘方向', 'error'); return; }
+    if ((tcBuy !== null && !(tcBuy > 1)) || (tcClose !== null && !(tcClose > 1))) {
+      toast('体彩赔率无效（需>1）', 'error'); return;
+    }
+    const result = Storage.Records.setClv(id, { betSide: side, pinnDirection: pinn, tcBuy, tcClose });
     closeModal();
-    const pct = ((clv - 1) * 100).toFixed(1);
-    toast(`CLV已保存：${clv >= 1 ? '+' : ''}${pct}%`, clv >= 1 ? 'success' : '');
+    const dirTxt = result.direction_match ? '✓ 跟上聪明钱' : '✗ 与聪明钱相反';
+    toast(`CLV已保存：${dirTxt}`, result.direction_match ? 'success' : '');
     renderRecords();
   }
 
@@ -1227,16 +1243,35 @@ const App = (() => {
           <span class="text-sm font-bold ${data.accuracy >= 0.5 ? 'text-green-600' : 'text-red-500'}">${data.withRecommend}场，${acc}%</span></div>`;
       }).join('');
 
-    const clvHtml = s.clvStats
-      ? `<div class="flex items-center justify-between mb-2">
-          <span class="text-sm text-gray-600">平均CLV</span>
-          <span class="text-sm font-bold ${s.clvStats.avgClv >= 0 ? 'text-green-600' : 'text-red-500'}">${s.clvStats.avgClv >= 0 ? '+' : ''}${(s.clvStats.avgClv * 100).toFixed(1)}%</span>
+    const clvHtml = (() => {
+      const c = s.clvStats;
+      if (!c) return `<p class="text-xs text-gray-400">暂无CLV数据（需在记录页补录平博关盘方向）</p>`;
+      const d = c.dirStats;
+      const t = c.tcClvStats;
+      const dirHtml = d ? `
+        <div class="flex items-center justify-between mb-1">
+          <span class="text-sm text-gray-600">与平博关盘一致</span>
+          <span class="text-sm font-bold ${d.matchRate >= 0.5 ? 'text-green-600' : 'text-red-500'}">${d.matchCount}场（${(d.matchRate * 100).toFixed(0)}%）</span>
         </div>
-        <div class="flex items-center justify-between">
-          <span class="text-sm text-gray-600">正CLV场次</span>
-          <span class="text-sm font-bold text-green-600">${(s.clvStats.posCount / s.clvStats.count * 100).toFixed(1)}%（${s.clvStats.count}场）</span>
-        </div>`
-      : `<p class="text-xs text-gray-400">暂无CLV数据（需赛后补录平博关盘赔率）</p>`;
+        <div class="flex items-center justify-between mb-1">
+          <span class="text-sm text-gray-600">与平博关盘相反</span>
+          <span class="text-sm text-gray-500">${d.mismatchCount}场（${((1 - d.matchRate) * 100).toFixed(0)}%）</span>
+        </div>
+        <p class="text-xs text-gray-400 mb-1">一致率>50%说明分析方向有长期价值</p>` : '';
+      const tcHtml = t ? `
+        <div class="border-t border-gray-100 pt-2 mt-2">
+          <p class="text-xs text-gray-500 mb-1">体彩内部CLV（可选追踪）</p>
+          <div class="flex items-center justify-between mb-1">
+            <span class="text-sm text-gray-600">平均体彩CLV</span>
+            <span class="text-sm font-bold ${t.avgClv >= 0 ? 'text-green-600' : 'text-red-500'}">${t.avgClv >= 0 ? '+' : ''}${(t.avgClv * 100).toFixed(1)}%</span>
+          </div>
+          <div class="flex items-center justify-between">
+            <span class="text-sm text-gray-600">正CLV场次</span>
+            <span class="text-sm font-bold text-green-600">${(t.posCount / t.count * 100).toFixed(1)}%（${t.count}场）</span>
+          </div>
+        </div>` : '';
+      return dirHtml + tcHtml;
+    })();
 
     const MIN_SAMPLE_S45 = 20;
     function sigRowS45(label, st) {
