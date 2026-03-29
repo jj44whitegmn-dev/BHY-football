@@ -1640,20 +1640,23 @@ const App = (() => {
     const ev      = saved.EV_THRESHOLD   || Config.EV_THRESHOLD;
     const gs      = saved.GAP_STRONG     || Config.GAP_STRONG;
     const gw      = saved.GAP_WEAK       || Config.GAP_WEAK;
-    const apiKey  = saved.claude_api_key || '';
-    const maskedKey = apiKey ? apiKey.slice(0, 16) + '…' + apiKey.slice(-4) : '';
+    const apiKey  = saved.gemini_api_key || '';
+    const maskedKey = apiKey ? apiKey.slice(0, 8) + '…' + apiKey.slice(-4) : '';
 
     $('settings-content').innerHTML = `
       <div class="space-y-4">
 
-        <!-- Claude API Key -->
+        <!-- Gemini API Key -->
         <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 space-y-3">
-          <h3 class="text-sm font-semibold text-gray-700">截图识别（Claude API）</h3>
-          <p class="text-xs text-gray-400">填入后可在步骤二点击「截图识别」按钮，自动从澳客截图中提取盘口和水位数据。</p>
+          <h3 class="text-sm font-semibold text-gray-700">截图识别（Gemini API）</h3>
+          <p class="text-xs text-gray-400">使用 Google Gemini 2.0 Flash 识别澳客截图。免费额度每天 1500 次，完全够用。</p>
+          <div class="text-xs bg-blue-50 text-blue-700 rounded-lg px-3 py-2">
+            申请地址：<strong>aistudio.google.com</strong> → 登录 Google 账号 → 点击「Get API Key」→ 免费复制即可
+          </div>
           <div>
-            <label class="form-label">Claude API Key</label>
+            <label class="form-label">Gemini API Key</label>
             <input id="cfg-api-key" type="password" class="form-input font-mono text-sm"
-              placeholder="sk-ant-api03-…" autocomplete="off" value="${apiKey}">
+              placeholder="AIzaSy…" autocomplete="off" value="${apiKey}">
             ${maskedKey ? `<p class="text-xs text-green-600 mt-1">已设置：${maskedKey}</p>` : ''}
           </div>
           <button class="btn btn-primary w-full" onclick="App.saveApiKey()">保存 API Key</button>
@@ -1711,16 +1714,16 @@ const App = (() => {
   function saveApiKey() {
     const key = ($('cfg-api-key')?.value || '').trim();
     if (!key) { toast('请输入 API Key', 'error'); return; }
-    if (!key.startsWith('sk-ant-')) { toast('Key 格式不正确，应以 sk-ant- 开头', 'error'); return; }
+    if (!key.startsWith('AIza')) { toast('Key 格式不正确，Gemini Key 应以 AIza 开头', 'error'); return; }
     const existing = Storage.Settings.get();
-    Storage.Settings.save({ ...existing, claude_api_key: key });
-    toast('API Key 已保存', 'success');
+    Storage.Settings.save({ ...existing, gemini_api_key: key });
+    toast('Gemini API Key 已保存', 'success');
     renderSettings();
   }
 
   function clearApiKey() {
     const existing = Storage.Settings.get();
-    delete existing.claude_api_key;
+    delete existing.gemini_api_key;
     Storage.Settings.save(existing);
     toast('API Key 已清除', '');
     renderSettings();
@@ -1728,8 +1731,8 @@ const App = (() => {
 
   function resetSettings() {
     const existing = Storage.Settings.get();
-    const key = existing.claude_api_key; // 保留 API Key
-    Storage.Settings.save(key ? { claude_api_key: key } : {});
+    const key = existing.gemini_api_key;
+    Storage.Settings.save(key ? { gemini_api_key: key } : {});
     Config.EV_THRESHOLD = 1.05; Config.GAP_STRONG = 0.06; Config.GAP_WEAK = 0.03;
     renderSettings();
     toast('已恢复默认设置', '');

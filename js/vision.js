@@ -1,6 +1,6 @@
 /* ============================================================
-   vision.js — Claude Vision API 图片识别模块
-   调用 Claude Sonnet 识别澳客截图中的亚盘赔率数据
+   vision.js — Gemini Vision API 图片识别模块
+   调用 Gemini 2.0 Flash 识别澳客截图中的亚盘赔率数据
 
    澳客页面有两种截图状态：
    【开盘截图】无"初始盘口"标签，所有行均有时间戳，最新在上最旧在下
@@ -11,8 +11,7 @@
 
 const Vision = (() => {
 
-  const API_URL = 'https://api.anthropic.com/v1/messages';
-  const MODEL   = 'claude-sonnet-4-6';
+  const MODEL = 'gemini-2.0-flash';
 
   const LINE_RULES = `【列数据类型——必须严格区分，这是最常见的错误来源】
 页面共三列数据：
@@ -29,7 +28,7 @@ const Vision = (() => {
 平手=0`;
 
   function getKey() {
-    return (Storage.Settings.get().claude_api_key || '').trim();
+    return (Storage.Settings.get().gemini_api_key || '').trim();
   }
 
   async function toBase64(file) {
@@ -42,40 +41,35 @@ const Vision = (() => {
   }
 
   /**
-   * callVision — 发送图片+提示到 Claude API，返回原始文本
-   * jsonMode=true 时添加 system 指令强制纯 JSON 输出
+   * callVision — 发送图片+提示到 Gemini API，返回原始文本
+   * systemPrompt 为可选系统指令
    */
-  async function callVision(imageFile, prompt, maxTokens, jsonMode = true) {
+  async function callVision(imageFile, prompt, maxTokens, systemPrompt = null) {
     const key = getKey();
-    if (!key) throw new Error('请先在设置页填入 Claude API Key');
+    if (!key) throw new Error('请先在设置页填入 Gemini API Key');
 
     const base64    = await toBase64(imageFile);
     const mediaType = imageFile.type.startsWith('image/') ? imageFile.type : 'image/jpeg';
 
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${key}`;
+
     const body = {
-      model: MODEL,
-      max_tokens: maxTokens,
-      messages: [{
-        role: 'user',
-        content: [
-          { type: 'image', source: { type: 'base64', media_type: mediaType, data: base64 } },
-          { type: 'text', text: prompt },
+      contents: [{
+        parts: [
+          { inline_data: { mime_type: mediaType, data: base64 } },
+          { text: prompt },
         ],
       }],
+      generationConfig: { maxOutputTokens: maxTokens },
     };
 
-    if (jsonMode) {
-      body.system = 'You extract data from images. After your analysis, you MUST end your response with a JSON object on its own line. The JSON is the final thing in your response.';
+    if (systemPrompt) {
+      body.systemInstruction = { parts: [{ text: systemPrompt }] };
     }
 
-    const resp = await fetch(API_URL, {
+    const resp = await fetch(url, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': key,
-        'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-direct-browser-access': 'true',
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
 
@@ -86,7 +80,7 @@ const Vision = (() => {
     }
 
     const data = await resp.json();
-    return (data.content?.[0]?.text || '').trim();
+    return (data.candidates?.[0]?.content?.parts?.[0]?.text || '').trim();
   }
 
   /**
@@ -106,9 +100,8 @@ const Vision = (() => {
       const cleaned = m[0].replace(/[\x00-\x1F\x7F]/g, ' ');
       try { return JSON.parse(cleaned); } catch {}
     }
-    // 5. 修复 market_summary 中双引号：用正则定位最后一个字符串字段的值
+    // 5. 修复 market_summary 中双引号
     if (m) {
-      // 找到 "market_summary" : " 之后的内容，到 JSON 末尾的 "} 之间
       const fixed = m[0].replace(
         /("market_summary"\s*:\s*")([\s\S]*?)("\s*\}\s*$)/,
         (_, pre, val, post) => pre + val.replace(/"/g, '\u2018') + post
@@ -120,13 +113,11 @@ const Vision = (() => {
 
   /**
    * extractFieldsFallback — 终极兜底：逐字段正则提取数字
-   * 即使 JSON 完全无法解析，也能从原始文本中提取关键数值
    */
   function extractFieldsFallback(str, fields) {
     const result = {};
     let found = false;
     for (const f of fields) {
-      // 匹配 "field_name" : 数字 或 "field_name" : null
       const re = new RegExp(`"${f}"\\s*:\\s*(-?[\\d.]+|null)`, 'i');
       const m = str.match(re);
       if (m) {
@@ -136,7 +127,6 @@ const Vision = (() => {
         result[f] = null;
       }
     }
-    // 提取 market_summary 字符串
     if (fields.includes('market_summary')) {
       const ms = str.match(/"market_summary"\s*:\s*"([\s\S]*?)(?:"\s*[,}])/);
       result.market_summary = ms ? ms[1].replace(/"/g, '\u2018') : null;
@@ -176,7 +166,8 @@ ${LINE_RULES}
 
 无法识别的字段填null。`;
 
-    const raw = await callVision(imageFile, prompt, 2048);
+    const sysPrompt = 'You extract data from images. After your analysis, you MUST end your response with a JSON object on its own line. The JSON is the final thing in your response.';
+    const raw = await callVision(imageFile, prompt, 2048, sysPrompt);
     const result = extractJSON(raw)
       || extractFieldsFallback(raw, ['open_line', 'open_home', 'open_away', 'window_home', 'window_away', 'window_line', 's5']);
     if (!result) throw new Error('初盘识别失败，请重试');
@@ -186,10 +177,8 @@ ${LINE_RULES}
   /**
    * recognizeClosing(imageFile, pinnOpenResult)
    * 平博临盘视图：提取终盘数据，AI直接计算S1/S3/S4，判断噪音区
-   * @param {Object|null} pinnOpenResult - recognizeOpening的返回值，用于S4对比
    */
   async function recognizeClosing(imageFile, pinnOpenResult = null) {
-    // 若有初盘数据，嵌入提示词供S4对比
     const openContext = pinnOpenResult
       ? `\n参考平博初盘数据（用于S4对比）：盘口${pinnOpenResult.open_line ?? '未知'}，主水${pinnOpenResult.open_home ?? '未知'}，客水${pinnOpenResult.open_away ?? '未知'}`
       : '';
@@ -224,20 +213,20 @@ ${LINE_RULES}
 
 无法识别的字段填null。`;
 
-    const numRaw = await callVision(imageFile, numPrompt, 2048);
+    const sysPrompt = 'You extract data from images. After your analysis, you MUST end your response with a JSON object on its own line. The JSON is the final thing in your response.';
+    const numRaw = await callVision(imageFile, numPrompt, 2048, sysPrompt);
     const numResult = extractJSON(numRaw)
       || extractFieldsFallback(numRaw, ['close_line', 'close_home', 'close_away', 'in_noise_zone', 's1', 's3', 's4']);
     if (!numResult) throw new Error('终盘识别失败。API原始返回：' + (numRaw || '(空)').substring(0, 200));
 
-    // 噪音区强制覆盖 s4=0
     if (numResult.in_noise_zone === 1) numResult.s4 = 0;
 
-    // ===== 市场解读（独立调用，失败不影响主结果）=====
+    // 市场解读（独立调用，失败不影响主结果）
     try {
       const summaryPrompt = `这是澳客App的平博亚盘赔率临盘截图。
 请分析关盘前1-2小时的密集变动，用1~2句中文总结：资金方向变化、临场水位趋势、综合市场倾向。
 只输出纯中文总结文字，不要JSON，不要标点以外的特殊符号。`;
-      const summaryRaw = await callVision(imageFile, summaryPrompt, 300, false);
+      const summaryRaw = await callVision(imageFile, summaryPrompt, 300);
       numResult.market_summary = summaryRaw.replace(/^["'\s]+|["'\s]+$/g, '') || null;
     } catch {
       numResult.market_summary = null;
@@ -249,7 +238,6 @@ ${LINE_RULES}
   /**
    * recognizeWilliamTimeline(imageFile, pinnOpenResult)
    * 威廉希尔完整时间轴：提取初盘+最新盘，AI直接计算S2
-   * @param {Object|null} pinnOpenResult - recognizeOpening的返回值，用于S2对比
    */
   async function recognizeWilliamTimeline(imageFile, pinnOpenResult = null) {
     const openContext = pinnOpenResult
@@ -280,7 +268,8 @@ ${LINE_RULES}
 
 无法识别的字段填null。`;
 
-    const raw = await callVision(imageFile, prompt, 2048);
+    const sysPrompt = 'You extract data from images. After your analysis, you MUST end your response with a JSON object on its own line. The JSON is the final thing in your response.';
+    const raw = await callVision(imageFile, prompt, 2048, sysPrompt);
     const result = extractJSON(raw)
       || extractFieldsFallback(raw, ['wh_open_home', 'wh_open_away', 'wh_close_line', 'wh_close_home', 'wh_close_away', 's2']);
     if (!result) throw new Error('威廉希尔时间轴识别失败，请重试');
