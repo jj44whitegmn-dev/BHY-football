@@ -11,7 +11,11 @@
 
 const Vision = (() => {
 
-  const MODEL = 'gemini-1.5-flash-latest';
+  // 模型由设置页自动检测后写入，默认值兜底
+  const DEFAULT_MODEL = 'gemini-1.5-flash-latest';
+  function getModel() {
+    return (Storage.Settings.get().gemini_model || DEFAULT_MODEL);
+  }
 
   const LINE_RULES = `【列数据类型——必须严格区分，这是最常见的错误来源】
 页面共三列数据：
@@ -51,7 +55,7 @@ const Vision = (() => {
     const base64    = await toBase64(imageFile);
     const mediaType = imageFile.type.startsWith('image/') ? imageFile.type : 'image/jpeg';
 
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${key}`;
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${getModel()}:generateContent?key=${key}`;
 
     const body = {
       contents: [{

@@ -1640,8 +1640,9 @@ const App = (() => {
     const ev      = saved.EV_THRESHOLD   || Config.EV_THRESHOLD;
     const gs      = saved.GAP_STRONG     || Config.GAP_STRONG;
     const gw      = saved.GAP_WEAK       || Config.GAP_WEAK;
-    const apiKey  = saved.gemini_api_key || '';
-    const maskedKey = apiKey ? apiKey.slice(0, 8) + '…' + apiKey.slice(-4) : '';
+    const apiKey    = saved.gemini_api_key || '';
+    const savedModel = saved.gemini_model  || '';
+    const maskedKey  = apiKey ? apiKey.slice(0, 8) + '…' + apiKey.slice(-4) : '';
 
     $('settings-content').innerHTML = `
       <div class="space-y-4">
@@ -1649,7 +1650,6 @@ const App = (() => {
         <!-- Gemini API Key -->
         <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 space-y-3">
           <h3 class="text-sm font-semibold text-gray-700">截图识别（Gemini API）</h3>
-          <p class="text-xs text-gray-400">使用 Google Gemini 2.0 Flash 识别澳客截图。免费额度每天 1500 次，完全够用。</p>
           <div class="text-xs bg-blue-50 text-blue-700 rounded-lg px-3 py-2">
             申请地址：<strong>aistudio.google.com</strong> → 登录 Google 账号 → 点击「Get API Key」→ 免费复制即可
           </div>
@@ -1660,7 +1660,12 @@ const App = (() => {
             ${maskedKey ? `<p class="text-xs text-green-600 mt-1">已设置：${maskedKey}</p>` : ''}
           </div>
           <button class="btn btn-primary w-full" onclick="App.saveApiKey()">保存 API Key</button>
-          ${apiKey ? `<button class="btn btn-danger w-full" onclick="App.clearApiKey()">清除 API Key</button>` : ''}
+          ${apiKey ? `
+          <button class="btn btn-ghost w-full" id="btn-detect-model" onclick="App.detectGeminiModel()">🔍 自动检测可用模型</button>
+          <div id="detect-result" class="text-xs rounded-lg px-3 py-2 ${savedModel ? 'bg-green-50 text-green-700' : 'hidden'}">
+            ${savedModel ? `当前使用模型：<strong>${savedModel}</strong>` : ''}
+          </div>
+          <button class="btn btn-danger w-full" onclick="App.clearApiKey()">清除 API Key</button>` : ''}
           <p class="text-xs text-gray-400">Key 仅保存在本设备浏览器中，不会上传任何服务器。</p>
         </div>
 
@@ -1717,8 +1722,70 @@ const App = (() => {
     if (!key.startsWith('AIza')) { toast('Key 格式不正确，Gemini Key 应以 AIza 开头', 'error'); return; }
     const existing = Storage.Settings.get();
     Storage.Settings.save({ ...existing, gemini_api_key: key });
-    toast('Gemini API Key 已保存', 'success');
+    toast('已保存，正在自动检测可用模型…', 'success');
     renderSettings();
+    // 保存后自动检测
+    setTimeout(() => detectGeminiModel(), 300);
+  }
+
+  async function detectGeminiModel() {
+    const key = (Storage.Settings.get().gemini_api_key || '').trim();
+    if (!key) { toast('请先保存 API Key', 'error'); return; }
+
+    const btn = $('btn-detect-model');
+    const resultEl = $('detect-result');
+    if (btn) { btn.textContent = '检测中…'; btn.disabled = true; }
+
+    // 优先级列表：按能力从高到低
+    const CANDIDATES = [
+      'gemini-2.0-flash-exp',
+      'gemini-2.0-flash',
+      'gemini-2.0-flash-lite',
+      'gemini-1.5-flash',
+      'gemini-1.5-flash-latest',
+      'gemini-1.5-flash-002',
+      'gemini-1.5-flash-001',
+      'gemini-1.0-pro-vision-latest',
+    ];
+
+    try {
+      // 查询该 Key 下所有可用模型
+      const resp = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models?key=${key}`
+      );
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.error?.message || `HTTP ${resp.status}`);
+
+      // 找出支持 generateContent 的模型名称（去掉 "models/" 前缀）
+      const available = (data.models || [])
+        .filter(m => (m.supportedGenerationMethods || []).includes('generateContent'))
+        .map(m => m.name.replace('models/', ''));
+
+      // 按优先级选出第一个可用的
+      const chosen = CANDIDATES.find(c => available.includes(c))
+        || available.find(n => n.includes('flash'))
+        || available[0];
+
+      if (!chosen) throw new Error('未找到支持 generateContent 的模型');
+
+      const existing = Storage.Settings.get();
+      Storage.Settings.save({ ...existing, gemini_model: chosen });
+
+      if (resultEl) {
+        resultEl.className = 'text-xs rounded-lg px-3 py-2 bg-green-50 text-green-700';
+        resultEl.innerHTML = `✅ 已自动选择模型：<strong>${chosen}</strong>`;
+      }
+      toast(`模型已选定：${chosen}`, 'success');
+    } catch (e) {
+      if (resultEl) {
+        resultEl.className = 'text-xs rounded-lg px-3 py-2 bg-red-50 text-red-700';
+        resultEl.innerHTML = `❌ 检测失败：${e.message}`;
+        resultEl.classList.remove('hidden');
+      }
+      toast('检测失败：' + e.message, 'error', 4000);
+    } finally {
+      if (btn) { btn.textContent = '🔍 自动检测可用模型'; btn.disabled = false; }
+    }
   }
 
   function clearApiKey() {
@@ -1783,6 +1850,7 @@ const App = (() => {
   return {
     toggleBacktestMode,
     setBacktestResult,
+    detectGeminiModel,
     openRecord,
     fillResult,
     saveClv,
