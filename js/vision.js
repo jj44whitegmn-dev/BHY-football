@@ -1,6 +1,7 @@
 /* ============================================================
-   vision.js — Gemini Vision API 图片识别模块
-   调用 Gemini 2.0 Flash 识别澳客截图中的亚盘赔率数据
+   vision.js — 视觉识别模块（支持通义千问 / Gemini 双引擎）
+   默认使用通义千问 qwen-vl-plus（国内直连，免费额度充足）
+   也可在设置页切换为 Gemini（需科学上网）
 
    澳客页面有两种截图状态：
    【开盘截图】无"初始盘口"标签，所有行均有时间戳，最新在上最旧在下
@@ -11,10 +12,31 @@
 
 const Vision = (() => {
 
-  // 模型由设置页自动检测后写入，默认值兜底
-  const DEFAULT_MODEL = 'gemini-1.5-flash-latest';
-  function getModel() {
-    return (Storage.Settings.get().gemini_model || DEFAULT_MODEL);
+  // ── 引擎配置 ──────────────────────────────────────────────
+  const PROVIDERS = {
+    qwen: {
+      label:   '通义千问（推荐，国内直连）',
+      keyName: 'qwen_api_key',
+      model:   'qwen-vl-plus',
+      baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions',
+    },
+    gemini: {
+      label:   'Gemini（需科学上网）',
+      keyName: 'gemini_api_key',
+      model:   null,   // 由 gemini_model 字段动态读取
+      baseUrl: null,   // 动态构建
+    },
+  };
+
+  function getProvider() {
+    return Storage.Settings.get().vision_provider || 'qwen';
+  }
+  function getKey() {
+    const p = PROVIDERS[getProvider()];
+    return (Storage.Settings.get()[p.keyName] || '').trim();
+  }
+  function getGeminiModel() {
+    return Storage.Settings.get().gemini_model || 'gemini-1.5-flash-latest';
   }
 
   const LINE_RULES = `【列数据类型——必须严格区分，这是最常见的错误来源】
@@ -31,10 +53,6 @@ const Vision = (() => {
 有"受"字 → 客让 → 正数：受半球=+0.5，受一球=+1，受球半=+1.5，受平/半=+0.25
 平手=0`;
 
-  function getKey() {
-    return (Storage.Settings.get().gemini_api_key || '').trim();
-  }
-
   async function toBase64(file) {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -45,31 +63,73 @@ const Vision = (() => {
   }
 
   /**
-   * callVision — 发送图片+提示到 Gemini API，返回原始文本
-   * systemPrompt 为可选系统指令
+   * callVision — 统一入口，根据 provider 自动路由到对应 API
    */
   async function callVision(imageFile, prompt, maxTokens, systemPrompt = null) {
+    const provider = getProvider();
     const key = getKey();
-    if (!key) throw new Error('请先在设置页填入 Gemini API Key');
+    if (!key) throw new Error(`请先在设置页填入 ${PROVIDERS[provider].label} API Key`);
 
+    if (provider === 'qwen') {
+      return _callQwen(imageFile, prompt, maxTokens, systemPrompt, key);
+    } else {
+      return _callGemini(imageFile, prompt, maxTokens, systemPrompt, key);
+    }
+  }
+
+  // ── 通义千问（OpenAI 兼容格式）─────────────────────────────
+  async function _callQwen(imageFile, prompt, maxTokens, systemPrompt, key) {
     const base64    = await toBase64(imageFile);
     const mediaType = imageFile.type.startsWith('image/') ? imageFile.type : 'image/jpeg';
+    const dataUrl   = `data:${mediaType};base64,${base64}`;
 
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${getModel()}:generateContent?key=${key}`;
+    const messages = [];
+    if (systemPrompt) messages.push({ role: 'system', content: systemPrompt });
+    messages.push({
+      role: 'user',
+      content: [
+        { type: 'image_url', image_url: { url: dataUrl } },
+        { type: 'text', text: prompt },
+      ],
+    });
+
+    const resp = await fetch(PROVIDERS.qwen.baseUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type':  'application/json',
+        'Authorization': `Bearer ${key}`,
+      },
+      body: JSON.stringify({
+        model: PROVIDERS.qwen.model,
+        messages,
+        max_tokens: maxTokens,
+      }),
+    });
+
+    if (!resp.ok) {
+      let msg = `API错误 ${resp.status}`;
+      try { const e = await resp.json(); msg = e.error?.message || e.message || msg; } catch {}
+      throw new Error(msg);
+    }
+    const data = await resp.json();
+    return (data.choices?.[0]?.message?.content || '').trim();
+  }
+
+  // ── Gemini ─────────────────────────────────────────────────
+  async function _callGemini(imageFile, prompt, maxTokens, systemPrompt, key) {
+    const base64    = await toBase64(imageFile);
+    const mediaType = imageFile.type.startsWith('image/') ? imageFile.type : 'image/jpeg';
+    const model     = getGeminiModel();
+    const url       = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
 
     const body = {
-      contents: [{
-        parts: [
-          { inline_data: { mime_type: mediaType, data: base64 } },
-          { text: prompt },
-        ],
-      }],
+      contents: [{ parts: [
+        { inline_data: { mime_type: mediaType, data: base64 } },
+        { text: prompt },
+      ]}],
       generationConfig: { maxOutputTokens: maxTokens },
     };
-
-    if (systemPrompt) {
-      body.systemInstruction = { parts: [{ text: systemPrompt }] };
-    }
+    if (systemPrompt) body.systemInstruction = { parts: [{ text: systemPrompt }] };
 
     const resp = await fetch(url, {
       method: 'POST',
@@ -82,29 +142,21 @@ const Vision = (() => {
       try { const e = await resp.json(); msg = e.error?.message || msg; } catch {}
       throw new Error(msg);
     }
-
     const data = await resp.json();
     return (data.candidates?.[0]?.content?.parts?.[0]?.text || '').trim();
   }
 
-  /**
-   * extractJSON — 多层 JSON 解析，从模型返回文本中提取 JSON 对象
-   */
+  // ── JSON 解析工具 ───────────────────────────────────────────
   function extractJSON(str) {
-    // 1. 代码块
     let m = str.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
     if (m) { try { return JSON.parse(m[1]); } catch {} }
-    // 2. 直接解析
     try { return JSON.parse(str); } catch {}
-    // 3. 提取 {...}
     m = str.match(/\{[\s\S]*\}/);
     if (m) { try { return JSON.parse(m[0]); } catch {} }
-    // 4. 清洗控制字符
     if (m) {
       const cleaned = m[0].replace(/[\x00-\x1F\x7F]/g, ' ');
       try { return JSON.parse(cleaned); } catch {}
     }
-    // 5. 修复 market_summary 中双引号
     if (m) {
       const fixed = m[0].replace(
         /("market_summary"\s*:\s*")([\s\S]*?)("\s*\}\s*$)/,
@@ -115,9 +167,6 @@ const Vision = (() => {
     return null;
   }
 
-  /**
-   * extractFieldsFallback — 终极兜底：逐字段正则提取数字
-   */
   function extractFieldsFallback(str, fields) {
     const result = {};
     let found = false;
@@ -138,10 +187,10 @@ const Vision = (() => {
     return found ? result : null;
   }
 
-  /**
-   * recognizeOpening(imageFile)
-   * 平博开盘完整时间轴：提取初盘数据 + 核心窗口数据 + S5深V反转（4-12小时区间）
-   */
+  const SYS = 'You extract data from images. After your analysis, you MUST end your response with a JSON object on its own line. The JSON is the final thing in your response.';
+
+  // ── 三个识别函数（Prompt 完全保留）─────────────────────────
+
   async function recognizeOpening(imageFile) {
     const prompt = `你是一个专业的亚洲盘口分析师。请分析这张平博（Pinnacle）盘口变化截图。
 
@@ -170,24 +219,19 @@ ${LINE_RULES}
 
 无法识别的字段填null。`;
 
-    const sysPrompt = 'You extract data from images. After your analysis, you MUST end your response with a JSON object on its own line. The JSON is the final thing in your response.';
-    const raw = await callVision(imageFile, prompt, 2048, sysPrompt);
+    const raw = await callVision(imageFile, prompt, 2048, SYS);
     const result = extractJSON(raw)
-      || extractFieldsFallback(raw, ['open_line', 'open_home', 'open_away', 'window_home', 'window_away', 'window_line', 's5']);
+      || extractFieldsFallback(raw, ['open_line','open_home','open_away','window_home','window_away','window_line','s5']);
     if (!result) throw new Error('初盘识别失败，请重试');
     return result;
   }
 
-  /**
-   * recognizeClosing(imageFile, pinnOpenResult)
-   * 平博临盘视图：提取终盘数据，AI直接计算S1/S3/S4，判断噪音区
-   */
   async function recognizeClosing(imageFile, pinnOpenResult = null) {
     const openContext = pinnOpenResult
       ? `\n参考平博初盘数据（用于S4对比）：盘口${pinnOpenResult.open_line ?? '未知'}，主水${pinnOpenResult.open_home ?? '未知'}，客水${pinnOpenResult.open_away ?? '未知'}`
       : '';
 
-    const numPrompt = `你是一个专业的亚洲盘口分析师。请分析这张平博（Pinnacle）临盘视图截图。
+    const prompt = `你是一个专业的亚洲盘口分析师。请分析这张平博（Pinnacle）临盘视图截图。
 
 截图格式说明：
 - 这是临近开球时的盘口状态
@@ -219,25 +263,18 @@ ${LINE_RULES}
 
 无法识别的字段填null。`;
 
-    const sysPrompt = 'You extract data from images. After your analysis, you MUST end your response with a JSON object on its own line. The JSON is the final thing in your response.';
-    const numRaw = await callVision(imageFile, numPrompt, 2500, sysPrompt);
-    const numResult = extractJSON(numRaw)
-      || extractFieldsFallback(numRaw, ['close_line', 'close_home', 'close_away', 'in_noise_zone', 's1', 's3', 's4', 'market_summary']);
-    if (!numResult) throw new Error('终盘识别失败。API原始返回：' + (numRaw || '(空)').substring(0, 200));
+    const raw = await callVision(imageFile, prompt, 2500, SYS);
+    const result = extractJSON(raw)
+      || extractFieldsFallback(raw, ['close_line','close_home','close_away','in_noise_zone','s1','s3','s4','market_summary']);
+    if (!result) throw new Error('终盘识别失败。API原始返回：' + (raw || '(空)').substring(0, 200));
 
-    if (numResult.in_noise_zone === 1) numResult.s4 = 0;
-    // 清理 market_summary 中可能的引号
-    if (numResult.market_summary && typeof numResult.market_summary === 'string') {
-      numResult.market_summary = numResult.market_summary.replace(/^["'\s]+|["'\s]+$/g, '') || null;
+    if (result.in_noise_zone === 1) result.s4 = 0;
+    if (result.market_summary && typeof result.market_summary === 'string') {
+      result.market_summary = result.market_summary.replace(/^["'\s]+|["'\s]+$/g, '') || null;
     }
-
-    return numResult;
+    return result;
   }
 
-  /**
-   * recognizeWilliamTimeline(imageFile, pinnOpenResult)
-   * 威廉希尔完整时间轴：提取初盘+最新盘，AI直接计算S2
-   */
   async function recognizeWilliamTimeline(imageFile, pinnOpenResult = null) {
     const openContext = pinnOpenResult
       ? `\n参考平博初盘数据（用于S2计算）：主水${pinnOpenResult.open_home ?? '未知'}，客水${pinnOpenResult.open_away ?? '未知'}`
@@ -267,13 +304,12 @@ ${LINE_RULES}
 
 无法识别的字段填null。`;
 
-    const sysPrompt = 'You extract data from images. After your analysis, you MUST end your response with a JSON object on its own line. The JSON is the final thing in your response.';
-    const raw = await callVision(imageFile, prompt, 2048, sysPrompt);
+    const raw = await callVision(imageFile, prompt, 2048, SYS);
     const result = extractJSON(raw)
-      || extractFieldsFallback(raw, ['wh_open_home', 'wh_open_away', 'wh_close_line', 'wh_close_home', 'wh_close_away', 's2']);
+      || extractFieldsFallback(raw, ['wh_open_home','wh_open_away','wh_close_line','wh_close_home','wh_close_away','s2']);
     if (!result) throw new Error('威廉希尔时间轴识别失败，请重试');
     return result;
   }
 
-  return { recognizeOpening, recognizeClosing, recognizeWilliamTimeline };
+  return { recognizeOpening, recognizeClosing, recognizeWilliamTimeline, PROVIDERS, getProvider };
 })();

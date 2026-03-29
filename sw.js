@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ftb-v12';
+const CACHE_NAME = 'ftb-v13';
 const ASSETS = [
   './',
   './index.html',

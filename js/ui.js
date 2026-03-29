@@ -1640,32 +1640,67 @@ const App = (() => {
     const ev      = saved.EV_THRESHOLD   || Config.EV_THRESHOLD;
     const gs      = saved.GAP_STRONG     || Config.GAP_STRONG;
     const gw      = saved.GAP_WEAK       || Config.GAP_WEAK;
-    const apiKey    = saved.gemini_api_key || '';
-    const savedModel = saved.gemini_model  || '';
-    const maskedKey  = apiKey ? apiKey.slice(0, 8) + '…' + apiKey.slice(-4) : '';
+    const provider   = saved.vision_provider || 'qwen';
+    const qwenKey    = saved.qwen_api_key    || '';
+    const geminiKey  = saved.gemini_api_key  || '';
+    const savedModel = saved.gemini_model    || '';
+    const maskKey = k => k ? k.slice(0, 6) + '…' + k.slice(-4) : '';
 
     $('settings-content').innerHTML = `
       <div class="space-y-4">
 
-        <!-- Gemini API Key -->
+        <!-- 截图识别引擎 -->
         <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 space-y-3">
-          <h3 class="text-sm font-semibold text-gray-700">截图识别（Gemini API）</h3>
-          <div class="text-xs bg-blue-50 text-blue-700 rounded-lg px-3 py-2">
-            申请地址：<strong>aistudio.google.com</strong> → 登录 Google 账号 → 点击「Get API Key」→ 免费复制即可
+          <h3 class="text-sm font-semibold text-gray-700">截图识别引擎</h3>
+
+          <!-- 引擎切换 -->
+          <div class="grid grid-cols-2 gap-2">
+            <button onclick="App.switchProvider('qwen')"
+              class="btn btn-sm ${provider==='qwen' ? 'btn-primary' : 'btn-ghost'}">
+              通义千问（推荐）
+            </button>
+            <button onclick="App.switchProvider('gemini')"
+              class="btn btn-sm ${provider==='gemini' ? 'btn-primary' : 'btn-ghost'}">
+              Gemini
+            </button>
           </div>
-          <div>
-            <label class="form-label">Gemini API Key</label>
-            <input id="cfg-api-key" type="password" class="form-input font-mono text-sm"
-              placeholder="AIzaSy…" autocomplete="off" value="${apiKey}">
-            ${maskedKey ? `<p class="text-xs text-green-600 mt-1">已设置：${maskedKey}</p>` : ''}
+
+          <!-- 通义千问设置 -->
+          <div id="cfg-qwen-block" class="${provider==='qwen' ? '' : 'hidden'} space-y-2">
+            <div class="text-xs bg-green-50 text-green-700 rounded-lg px-3 py-2 leading-relaxed">
+              <strong>申请步骤：</strong>登录 <strong>dashscope.aliyun.com</strong> → 右上角「API-KEY管理」→ 新建并复制 Key<br>
+              免费额度：qwen-vl-plus 每月100万token，国内直连无需VPN
+            </div>
+            <div>
+              <label class="form-label">通义千问 API Key</label>
+              <input id="cfg-qwen-key" type="password" class="form-input font-mono text-sm"
+                placeholder="sk-…" autocomplete="off" value="${qwenKey}">
+              ${qwenKey ? `<p class="text-xs text-green-600 mt-1">已设置：${maskKey(qwenKey)}</p>` : ''}
+            </div>
+            <button class="btn btn-primary w-full" onclick="App.saveApiKey()">保存 Key</button>
+            ${qwenKey ? `<button class="btn btn-danger w-full" onclick="App.clearApiKey()">清除 Key</button>` : ''}
           </div>
-          <button class="btn btn-primary w-full" onclick="App.saveApiKey()">保存 API Key</button>
-          ${apiKey ? `
-          <button class="btn btn-ghost w-full" id="btn-detect-model" onclick="App.detectGeminiModel()">🔍 自动检测可用模型</button>
-          <div id="detect-result" class="text-xs rounded-lg px-3 py-2 ${savedModel ? 'bg-green-50 text-green-700' : 'hidden'}">
-            ${savedModel ? `当前使用模型：<strong>${savedModel}</strong>` : ''}
+
+          <!-- Gemini 设置 -->
+          <div id="cfg-gemini-block" class="${provider==='gemini' ? '' : 'hidden'} space-y-2">
+            <div class="text-xs bg-blue-50 text-blue-700 rounded-lg px-3 py-2">
+              申请地址：<strong>aistudio.google.com</strong>（需科学上网）→ 点击「Get API Key」
+            </div>
+            <div>
+              <label class="form-label">Gemini API Key</label>
+              <input id="cfg-gemini-key" type="password" class="form-input font-mono text-sm"
+                placeholder="AIzaSy…" autocomplete="off" value="${geminiKey}">
+              ${geminiKey ? `<p class="text-xs text-green-600 mt-1">已设置：${maskKey(geminiKey)}</p>` : ''}
+            </div>
+            <button class="btn btn-primary w-full" onclick="App.saveApiKey()">保存 Key</button>
+            ${geminiKey ? `
+            <button class="btn btn-ghost w-full" id="btn-detect-model" onclick="App.detectGeminiModel()">🔍 自动检测可用模型</button>
+            <div id="detect-result" class="text-xs rounded-lg px-3 py-2 ${savedModel ? 'bg-green-50 text-green-700' : 'hidden'}">
+              ${savedModel ? `当前使用模型：<strong>${savedModel}</strong>` : ''}
+            </div>
+            <button class="btn btn-danger w-full" onclick="App.clearApiKey()">清除 Key</button>` : ''}
           </div>
-          <button class="btn btn-danger w-full" onclick="App.clearApiKey()">清除 API Key</button>` : ''}
+
           <p class="text-xs text-gray-400">Key 仅保存在本设备浏览器中，不会上传任何服务器。</p>
         </div>
 
@@ -1716,16 +1751,30 @@ const App = (() => {
     toast('设置已保存', 'success');
   }
 
-  function saveApiKey() {
-    const key = ($('cfg-api-key')?.value || '').trim();
-    if (!key) { toast('请输入 API Key', 'error'); return; }
-    if (!key.startsWith('AIza')) { toast('Key 格式不正确，Gemini Key 应以 AIza 开头', 'error'); return; }
+  function switchProvider(p) {
     const existing = Storage.Settings.get();
-    Storage.Settings.save({ ...existing, gemini_api_key: key });
-    toast('已保存，正在自动检测可用模型…', 'success');
+    Storage.Settings.save({ ...existing, vision_provider: p });
     renderSettings();
-    // 保存后自动检测
-    setTimeout(() => detectGeminiModel(), 300);
+  }
+
+  function saveApiKey() {
+    const provider = Storage.Settings.get().vision_provider || 'qwen';
+    const existing = Storage.Settings.get();
+    if (provider === 'qwen') {
+      const key = ($('cfg-qwen-key')?.value || '').trim();
+      if (!key) { toast('请输入通义千问 API Key', 'error'); return; }
+      Storage.Settings.save({ ...existing, qwen_api_key: key });
+      toast('通义千问 Key 已保存 ✓', 'success');
+      renderSettings();
+    } else {
+      const key = ($('cfg-gemini-key')?.value || '').trim();
+      if (!key) { toast('请输入 Gemini API Key', 'error'); return; }
+      if (!key.startsWith('AIza')) { toast('Gemini Key 应以 AIza 开头', 'error'); return; }
+      Storage.Settings.save({ ...existing, gemini_api_key: key });
+      toast('已保存，正在自动检测模型…', 'success');
+      renderSettings();
+      setTimeout(() => detectGeminiModel(), 300);
+    }
   }
 
   async function detectGeminiModel() {
@@ -1789,8 +1838,14 @@ const App = (() => {
   }
 
   function clearApiKey() {
+    const provider = Storage.Settings.get().vision_provider || 'qwen';
     const existing = Storage.Settings.get();
-    delete existing.gemini_api_key;
+    if (provider === 'qwen') {
+      delete existing.qwen_api_key;
+    } else {
+      delete existing.gemini_api_key;
+      delete existing.gemini_model;
+    }
     Storage.Settings.save(existing);
     toast('API Key 已清除', '');
     renderSettings();
@@ -1798,8 +1853,11 @@ const App = (() => {
 
   function resetSettings() {
     const existing = Storage.Settings.get();
-    const key = existing.gemini_api_key;
-    Storage.Settings.save(key ? { gemini_api_key: key } : {});
+    const keep = {};
+    ['qwen_api_key','gemini_api_key','gemini_model','vision_provider'].forEach(k => {
+      if (existing[k]) keep[k] = existing[k];
+    });
+    Storage.Settings.save(keep);
     Config.EV_THRESHOLD = 1.05; Config.GAP_STRONG = 0.06; Config.GAP_WEAK = 0.03;
     renderSettings();
     toast('已恢复默认设置', '');
@@ -1850,6 +1908,7 @@ const App = (() => {
   return {
     toggleBacktestMode,
     setBacktestResult,
+    switchProvider,
     detectGeminiModel,
     openRecord,
     fillResult,
