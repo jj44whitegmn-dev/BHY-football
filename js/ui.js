@@ -1219,13 +1219,33 @@ const App = (() => {
                 </span>
               </div>` : ''}
             </div>`
-          : `<div class="bg-amber-50 border border-amber-200 rounded-xl p-3 mt-3">
-              <div class="text-xs font-semibold text-amber-700 mb-2">补录CLV（赛后填写）</div>
+          : (() => {
+              // 从决策文本中提取模型信号方向
+              const decText = rec.decision || '';
+              const modelDir = decText.includes('主胜') ? '主胜' : decText.includes('客胜') ? '客胜' : decText.includes('平局') ? '平局' : '';
+              // 亚盘总分兜底方向
+              const asianTotal = (rec.asian_signals || {}).total || 0;
+              const asianDir = asianTotal > 0 ? '主胜' : asianTotal < 0 ? '客胜' : '';
+              const suggestDir = modelDir || asianDir;
+              // 操作信号
+              const actionSig = rec.action_signal || '';
+              const notBetting = actionSig === '不建议买入' || actionSig === '跳过';
+              // 提示文字
+              const hint = notBetting
+                ? `模型不建议买入时，填入你认为最有价值的方向用于验证分析质量${suggestDir ? '（信号偏向：<strong>' + suggestDir + '</strong>）' : ''}`
+                : `填入你实际或假设下注的方向`;
+              // 选项 HTML（自动预选建议方向）
+              const sideOpts = ['主胜','平局','客胜'].map(v =>
+                `<option value="${v}"${v === suggestDir ? ' selected' : ''}>${v}</option>`).join('');
+              return `<div class="bg-amber-50 border border-amber-200 rounded-xl p-3 mt-3">
+              <div class="text-xs font-semibold text-amber-700 mb-1">补录CLV（赛后填写）</div>
+              <div class="text-xs text-amber-600 mb-2 leading-relaxed">${hint}</div>
               <div class="space-y-2 mb-3">
                 <select id="clv-side-${id}" class="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm">
-                  <option value="">你的下注方向</option>
-                  <option value="主胜">主胜</option><option value="平局">平局</option><option value="客胜">客胜</option>
+                  <option value="">选择你的分析方向</option>
+                  ${sideOpts}
                 </select>
+                <div class="text-xs text-gray-400 -mt-1 px-1">↑ 不论是否实际下注，填你判断最有价值的那边</div>
                 <select id="clv-pinn-${id}" class="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm">
                   <option value="">平博关盘方向（赔率最低项）</option>
                   <option value="主胜">主胜</option><option value="平局">平局</option><option value="客胜">客胜</option>
@@ -1237,7 +1257,8 @@ const App = (() => {
                 <input id="clv-tc-close-${id}" type="number" step="0.01" min="1" placeholder="体彩关盘赔率（同选项）" class="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm">
               </div>
               <button onclick="App.saveClv(${id})" class="btn btn-primary w-full text-sm">保存CLV</button>
-            </div>`
+            </div>`;
+            })()
         }
 
         <button class="btn btn-danger w-full mt-2" onclick="App.deleteRecord(${id})">删除此记录</button>
