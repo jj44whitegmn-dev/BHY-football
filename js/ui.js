@@ -389,7 +389,7 @@ const App = (() => {
 
     $('s3-ev-preview').innerHTML = `
       <div class="bg-white rounded-xl border border-gray-100 p-3">
-        <div class="text-xs text-gray-500 mb-2">抽水率：约 <strong>${r.overround.toFixed(1)}%</strong>（竞彩官方返奖约68%）</div>
+        <div class="text-xs text-gray-500 mb-2">抽水率：约 <strong>${r.overround.toFixed(1)}%</strong>（竞彩官方返奖约69%，抽水约31%）</div>
         <div class="overflow-x-auto">
           <table class="ev-table w-full">
             <thead><tr>
@@ -809,6 +809,28 @@ const App = (() => {
         ${dec.detail ? `<div class="decision-detail">${dec.detail}</div>` : ''}
       </div>
 
+      ${(() => {
+        // 联赛可信度警告
+        const tier = Config.LEAGUE_TIERS;
+        const isHigh   = tier.HIGH.includes(info.league);
+        const isMedium = tier.MEDIUM.includes(info.league);
+        const leagueTierHtml = (!isHigh && !isMedium)
+          ? `<div class="mt-3 px-3 py-2 bg-orange-50 border border-orange-300 rounded-xl text-xs text-orange-800">
+              ⚠️ 低级别/非主流联赛，否决模型未经专项校准，建议以市场定价为主
+            </div>`
+          : '';
+
+        // 模型与市场严重背离警告（任一gap绝对值>20%）
+        const maxGap = Math.max(Math.abs(er.gap.home), Math.abs(er.gap.draw), Math.abs(er.gap.away));
+        const divergenceHtml = maxGap > 0.20
+          ? `<div class="mt-3 px-3 py-2 bg-red-50 border border-red-400 rounded-xl text-xs text-red-800 font-medium">
+              🔴 模型与市场严重背离（最大差值${(maxGap*100).toFixed(0)}%），建议跳过此场
+            </div>`
+          : '';
+
+        return leagueTierHtml + divergenceHtml;
+      })()}
+
       <!-- CLV提醒 -->
       <div class="mt-3 px-3 py-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800">
         <div class="font-semibold mb-1">赛后请补录平博关盘赔率（在记录页编辑）</div>
@@ -850,14 +872,19 @@ const App = (() => {
         s3: analysis.step4.s3 || 0,
         s4: analysis.step4.s4 || 0,
         s5: analysis.step4.s5 || 0,
-        total: asianTotal,
+        total:        asianTotal,
+        window_valid: !_noiseZone,   // S4/S5是否处于有效时间窗口
       },
-      decision:      `${dec.level} ${dec.text}`,
-      recommend:     dec.recommend,
-      model_version: Config.MODEL_VERSION,
-      actual_result: '',
-      is_correct:    null,
-      notes:         '',
+      decision:        `${dec.level} ${dec.text}`,
+      recommend:       dec.recommend,
+      analysis_window: (() => { const w = _checkTimeWindow(); return w ? w.code : 'unknown'; })(),
+      model_version:   Config.MODEL_VERSION,
+      clv_tracking:    null,     // 赛后补录：{ bet_side, buy_odds, close_odds, clv }
+      betted:          false,    // 是否实际下注
+      bet_selection:   null,     // 下注选项
+      actual_result:   '',
+      is_correct:      null,
+      notes:           '',
     };
 
     Storage.Records.add(record);
@@ -1036,7 +1063,7 @@ const App = (() => {
 
         <!-- 亚盘 -->
         <div class="result-block">
-          <div class="result-block-header">亚盘五层信号 · 总分 ${total>=0?'+'+total:total}</div>
+          <div class="result-block-header">亚盘六层信号 · 总分 ${total>=0?'+'+total:total}</div>
           <div class="result-block-body">
             ${sigRows}
             <p class="text-xs text-gray-500 mt-2 text-center">${Asian.interpret(total)}</p>
@@ -1051,9 +1078,52 @@ const App = (() => {
 
         ${resultSection}
 
+        <!-- CLV补录 -->
+        ${rec.clv_tracking
+          ? `<div class="bg-green-50 border border-green-200 rounded-xl p-3 mt-3">
+              <div class="text-xs font-semibold text-green-700 mb-1">CLV已补录</div>
+              <div class="flex justify-between text-xs text-gray-600">
+                <span>投注：${rec.clv_tracking.bet_side} @ ${rec.clv_tracking.buy_odds.toFixed(3)}</span>
+                <span>平博关盘：${rec.clv_tracking.close_odds.toFixed(3)}</span>
+              </div>
+              <div class="text-center mt-1 font-bold ${rec.clv >= 0 ? 'text-green-600' : 'text-red-500'}">
+                CLV ${rec.clv >= 0 ? '+' : ''}${(rec.clv * 100).toFixed(1)}%
+                <span class="text-xs font-normal text-gray-500 ml-1">${rec.clv >= 0 ? '跑赢关盘线' : '跑输关盘线'}</span>
+              </div>
+            </div>`
+          : `<div class="bg-amber-50 border border-amber-200 rounded-xl p-3 mt-3">
+              <div class="text-xs font-semibold text-amber-700 mb-2">补录CLV（赛后填写）</div>
+              <div class="grid grid-cols-3 gap-1.5 mb-2">
+                <select id="clv-side-${id}" class="col-span-3 border border-gray-200 rounded-lg px-2 py-1.5 text-sm">
+                  <option value="">投注选项</option>
+                  <option value="主胜">主胜</option>
+                  <option value="平局">平局</option>
+                  <option value="客胜">客胜</option>
+                </select>
+                <input id="clv-buy-${id}" type="number" step="0.01" placeholder="买入赔率" class="col-span-3 border border-gray-200 rounded-lg px-2 py-1.5 text-sm">
+                <input id="clv-close-${id}" type="number" step="0.01" placeholder="平博关盘赔率" class="col-span-3 border border-gray-200 rounded-lg px-2 py-1.5 text-sm">
+              </div>
+              <button onclick="App.saveClv(${id})" class="btn btn-primary w-full text-sm">计算并保存CLV</button>
+            </div>`
+        }
+
         <button class="btn btn-danger w-full mt-2" onclick="App.deleteRecord(${id})">删除此记录</button>
       </div>`;
     openModal();
+  }
+
+  function saveClv(id) {
+    const side  = (document.getElementById(`clv-side-${id}`) || {}).value;
+    const buy   = parseFloat((document.getElementById(`clv-buy-${id}`) || {}).value);
+    const close = parseFloat((document.getElementById(`clv-close-${id}`) || {}).value);
+    if (!side)         { toast('请选择投注选项', 'error'); return; }
+    if (!(buy > 1))    { toast('买入赔率无效（需>1）', 'error'); return; }
+    if (!(close > 1))  { toast('关盘赔率无效（需>1）', 'error'); return; }
+    const clv = Storage.Records.setClv(id, side, buy, close);
+    closeModal();
+    const pct = ((clv - 1) * 100).toFixed(1);
+    toast(`CLV已保存：${clv >= 1 ? '+' : ''}${pct}%`, clv >= 1 ? 'success' : '');
+    renderRecords();
   }
 
   function fillResult(id, result) {
@@ -1555,6 +1625,7 @@ const App = (() => {
   return {
     openRecord,
     fillResult,
+    saveClv,
     deleteRecord,
     saveBet,
     addBetLeg,

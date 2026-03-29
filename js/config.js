@@ -34,7 +34,13 @@ const Config = {
   ASIAN_STRONG: 2,
   ASIAN_WEAK: 1,
   ASIAN_ONLY: 3,
-  DRAW_ASIAN_STRONG: 1,
-  DRAW_ASIAN_WEAK: 2,
+  DRAW_ASIAN_STRONG: 0,   // 平局★★★：仅亚盘完全中性（总分=0）
+  DRAW_ASIAN_WEAK: 1,    // 平局★★ ：亚盘轻微倾向（总分±1）
+  // 联赛可信度分级
+  LEAGUE_TIERS: {
+    HIGH:   ['英超','德甲','西甲','意甲','法甲'],
+    MEDIUM: ['J联赛','中超','荷甲','韩K联赛','葡超'],
+    // 其余联赛归为 LOW
+  },
   MODEL_VERSION: 'v3',
 };

@@ -84,19 +84,19 @@ const Asian = (() => {
       result.s1 = d < -Config.WATER_DIFF_S1 ? 1 : d > Config.WATER_DIFF_S1 ? -1 : 0;
     }
 
-    // ── S2：公司分歧（平博 vs 威廉希尔）────────────────────────
-    // 优先用终盘对比（关盘比对能看出分歧是否扩大或收敛）
-    // 无终盘时回退到初盘对比
+    // ── S2：公司分歧（平博 vs 威廉希尔 初盘对初盘）──────────────
+    // 规格：使用初盘方向对比（开盘时两家公司的原始定价分歧）
+    // 无初盘数据时回退到终盘对比
     const T = Config.WATER_DIFF_S2; // 0.10
-    if (hasWillClose && hasClose) {
-      const pDiff = pinnCloseHome - pinnCloseAway;
-      const wDiff = willCloseHome - willCloseAway;
+    if (hasOpen && hasWillOpen) {
+      const pDiff = pinnOpenHome - pinnOpenAway;
+      const wDiff = willOpenHome - willOpenAway;
       const pinnH = pDiff < -T; const pinnA = pDiff > T;
       const willH = wDiff < -T; const willA = wDiff > T;
       result.s2 = (pinnH && willA) ? 1 : (pinnA && willH) ? -1 : 0;
-    } else if (hasOpen && hasWillOpen) {
-      const pDiff = pinnOpenHome - pinnOpenAway;
-      const wDiff = willOpenHome - willOpenAway;
+    } else if (hasWillClose && hasClose) {
+      const pDiff = pinnCloseHome - pinnCloseAway;
+      const wDiff = willCloseHome - willCloseAway;
       const pinnH = pDiff < -T; const pinnA = pDiff > T;
       const willH = wDiff < -T; const willA = wDiff > T;
       result.s2 = (pinnH && willA) ? 1 : (pinnA && willH) ? -1 : 0;

@@ -82,6 +82,27 @@ const Storage = (() => {
     },
 
     /**
+     * setClv(id, betSide, buyOdds, closeOdds) — 补录CLV数据
+     * CLV = buyOdds / closeOdds（>1表示跑赢关盘线）
+     * clv_percent = (CLV - 1) * 100
+     */
+    setClv(id, betSide, buyOdds, closeOdds) {
+      const all = this.getAll();
+      const idx = all.findIndex(r => r.id === id);
+      if (idx < 0) return;
+      const clv = buyOdds / closeOdds;
+      all[idx] = {
+        ...all[idx],
+        bet_selection: betSide,
+        betted: true,
+        clv_tracking: { bet_side: betSide, buy_odds: buyOdds, close_odds: closeOdds, clv },
+        clv: clv - 1,   // 百分比形式，正值=跑赢关盘线
+      };
+      _write(KEYS.records, all);
+      return clv;
+    },
+
+    /**
      * delete(id) — 删除指定记录
      */
     delete(id) {
