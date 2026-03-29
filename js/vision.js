@@ -11,7 +11,7 @@
 
 const Vision = (() => {
 
-  const MODEL = 'gemini-2.0-flash';
+  const MODEL = 'gemini-1.5-flash';
 
   const LINE_RULES = `【列数据类型——必须严格区分，这是最常见的错误来源】
 页面共三列数据：
@@ -208,28 +208,23 @@ ${LINE_RULES}
    盘口退让（主让球减少）但客水反而升高 → s4=1
    方向一致或无明显背离 → s4=0；噪音区 → s4=0
 
+5. 市场解读：分析关盘前1-2小时的密集变动，用1~2句中文总结资金方向和市场倾向。放入 market_summary 字段（纯中文，不含双引号）。
+
 你可以先分析推理，但最后一行必须是且仅是如下格式的JSON：
-{"close_line":数字,"close_home":数字,"close_away":数字,"in_noise_zone":整数,"s1":整数,"s3":整数,"s4":整数}
+{"close_line":数字,"close_home":数字,"close_away":数字,"in_noise_zone":整数,"s1":整数,"s3":整数,"s4":整数,"market_summary":"文字"}
 
 无法识别的字段填null。`;
 
     const sysPrompt = 'You extract data from images. After your analysis, you MUST end your response with a JSON object on its own line. The JSON is the final thing in your response.';
-    const numRaw = await callVision(imageFile, numPrompt, 2048, sysPrompt);
+    const numRaw = await callVision(imageFile, numPrompt, 2500, sysPrompt);
     const numResult = extractJSON(numRaw)
-      || extractFieldsFallback(numRaw, ['close_line', 'close_home', 'close_away', 'in_noise_zone', 's1', 's3', 's4']);
+      || extractFieldsFallback(numRaw, ['close_line', 'close_home', 'close_away', 'in_noise_zone', 's1', 's3', 's4', 'market_summary']);
     if (!numResult) throw new Error('终盘识别失败。API原始返回：' + (numRaw || '(空)').substring(0, 200));
 
     if (numResult.in_noise_zone === 1) numResult.s4 = 0;
-
-    // 市场解读（独立调用，失败不影响主结果）
-    try {
-      const summaryPrompt = `这是澳客App的平博亚盘赔率临盘截图。
-请分析关盘前1-2小时的密集变动，用1~2句中文总结：资金方向变化、临场水位趋势、综合市场倾向。
-只输出纯中文总结文字，不要JSON，不要标点以外的特殊符号。`;
-      const summaryRaw = await callVision(imageFile, summaryPrompt, 300);
-      numResult.market_summary = summaryRaw.replace(/^["'\s]+|["'\s]+$/g, '') || null;
-    } catch {
-      numResult.market_summary = null;
+    // 清理 market_summary 中可能的引号
+    if (numResult.market_summary && typeof numResult.market_summary === 'string') {
+      numResult.market_summary = numResult.market_summary.replace(/^["'\s]+|["'\s]+$/g, '') || null;
     }
 
     return numResult;
