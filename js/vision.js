@@ -11,7 +11,7 @@
 
 const Vision = (() => {
 
-  const MODEL = 'gemini-1.5-flash';
+  const MODEL = 'gemini-1.5-flash-latest';
 
   const LINE_RULES = `【列数据类型——必须严格区分，这是最常见的错误来源】
 页面共三列数据：
