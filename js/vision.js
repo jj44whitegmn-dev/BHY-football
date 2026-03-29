@@ -79,18 +79,18 @@ const Vision = (() => {
 
   // ── 通义千问（OpenAI 兼容格式）─────────────────────────────
   async function _callQwen(imageFile, prompt, maxTokens, systemPrompt, key) {
-    const base64    = await toBase64(imageFile);
-    const mediaType = imageFile.type.startsWith('image/') ? imageFile.type : 'image/jpeg';
-    const dataUrl   = `data:${mediaType};base64,${base64}`;
+    const files = Array.isArray(imageFile) ? imageFile : [imageFile];
+    const imageParts = await Promise.all(files.map(async f => {
+      const base64    = await toBase64(f);
+      const mediaType = f.type.startsWith('image/') ? f.type : 'image/jpeg';
+      return { type: 'image_url', image_url: { url: `data:${mediaType};base64,${base64}` } };
+    }));
 
     const messages = [];
     if (systemPrompt) messages.push({ role: 'system', content: systemPrompt });
     messages.push({
       role: 'user',
-      content: [
-        { type: 'image_url', image_url: { url: dataUrl } },
-        { type: 'text', text: prompt },
-      ],
+      content: [...imageParts, { type: 'text', text: prompt }],
     });
 
     const resp = await fetch(PROVIDERS.qwen.baseUrl, {
@@ -117,16 +117,17 @@ const Vision = (() => {
 
   // ── Gemini ─────────────────────────────────────────────────
   async function _callGemini(imageFile, prompt, maxTokens, systemPrompt, key) {
-    const base64    = await toBase64(imageFile);
-    const mediaType = imageFile.type.startsWith('image/') ? imageFile.type : 'image/jpeg';
+    const files     = Array.isArray(imageFile) ? imageFile : [imageFile];
+    const imgParts  = await Promise.all(files.map(async f => {
+      const base64    = await toBase64(f);
+      const mediaType = f.type.startsWith('image/') ? f.type : 'image/jpeg';
+      return { inline_data: { mime_type: mediaType, data: base64 } };
+    }));
     const model     = getGeminiModel();
     const url       = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
 
     const body = {
-      contents: [{ parts: [
-        { inline_data: { mime_type: mediaType, data: base64 } },
-        { text: prompt },
-      ]}],
+      contents: [{ parts: [...imgParts, { text: prompt }] }],
       generationConfig: { maxOutputTokens: maxTokens },
     };
     if (systemPrompt) body.systemInstruction = { parts: [{ text: systemPrompt }] };
@@ -276,11 +277,15 @@ ${LINE_RULES}
   }
 
   async function recognizeWilliamTimeline(imageFile, pinnOpenResult = null) {
+    const files = Array.isArray(imageFile) ? imageFile : [imageFile];
+    const multiHint = files.length > 1
+      ? '\n【多图说明】你收到了两张截图：图1是时间轴下方部分（含初盘/最早行），图2是时间轴上方部分（含最新行）。请综合两张图识别完整数据：初盘取图1最底行，最新盘取图2最顶行。'
+      : '';
     const openContext = pinnOpenResult
       ? `\n参考平博初盘数据（用于S2计算）：主水${pinnOpenResult.open_home ?? '未知'}，客水${pinnOpenResult.open_away ?? '未知'}`
       : '';
 
-    const prompt = `你是一个专业的亚洲盘口分析师。请分析这张威廉希尔（William Hill）盘口变化截图。
+    const prompt = `你是一个专业的亚洲盘口分析师。请分析这张（或这两张）威廉希尔（William Hill）盘口变化截图。${multiHint}
 
 截图格式说明：
 - 列表从下到上按时间排列，最底部是最早的初始盘口，最顶部是最新数据
@@ -304,7 +309,7 @@ ${LINE_RULES}
 
 无法识别的字段填null。`;
 
-    const raw = await callVision(imageFile, prompt, 2048, SYS);
+    const raw = await callVision(files, prompt, 2048, SYS);
     const result = extractJSON(raw)
       || extractFieldsFallback(raw, ['wh_open_home','wh_open_away','wh_close_line','wh_close_home','wh_close_away','s2']);
     if (!result) throw new Error('威廉希尔时间轴识别失败，请重试');

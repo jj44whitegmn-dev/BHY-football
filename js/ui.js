@@ -161,8 +161,10 @@ const App = (() => {
       if (!btnEl || !inputEl) return;
       btnEl.addEventListener('click', e => { e.preventDefault(); inputEl.value = ''; inputEl.click(); });
       inputEl.addEventListener('change', e => {
-        const file = e.target.files[0];
-        if (file) processVisionImage(file, company, type);
+        const files = Array.from(e.target.files || []);
+        if (!files.length) return;
+        // 威廉希尔支持多张截图（1或2张）；其他只取第一张
+        processVisionImage(company === 'william_hill' ? files : files[0], company, type);
       });
     });
 

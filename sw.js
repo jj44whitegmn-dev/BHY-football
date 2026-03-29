@@ -1,18 +1,18 @@
-const CACHE_NAME = 'ftb-v15';
+const CACHE_NAME = 'ftb-v16';
 const ASSETS = [
   './',
   './index.html',
   './manifest.json',
-  './css/app.css?v=15',
-  './js/config.js?v=15',
-  './js/veto.js?v=15',
-  './js/ev.js?v=15',
-  './js/asian.js?v=15',
-  './js/decision.js?v=15',
-  './js/storage.js?v=15',
-  './js/stats.js?v=15',
-  './js/vision.js?v=15',
-  './js/ui.js?v=15',
+  './css/app.css?v=16',
+  './js/config.js?v=16',
+  './js/veto.js?v=16',
+  './js/ev.js?v=16',
+  './js/asian.js?v=16',
+  './js/decision.js?v=16',
+  './js/storage.js?v=16',
+  './js/stats.js?v=16',
+  './js/vision.js?v=16',
+  './js/ui.js?v=16',
 ];
 
 self.addEventListener('install', e => {

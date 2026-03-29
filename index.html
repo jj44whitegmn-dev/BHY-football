@@ -10,7 +10,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="足彩助手">
   <script src="https://cdn.tailwindcss.com"></script>
-  <link rel="stylesheet" href="css/app.css?v=15">
+  <link rel="stylesheet" href="css/app.css?v=16">
 </head>
 <body class="bg-gray-50 min-h-screen" style="padding-bottom: 60px;">
 
@@ -126,7 +126,7 @@
             <!-- 隐藏文件输入 -->
             <input type="file" id="vision-file-pinn-open"  accept="image/*" class="hidden">
             <input type="file" id="vision-file-pinn-close" accept="image/*" class="hidden">
-            <input type="file" id="vision-file-will-open"  accept="image/*" class="hidden">
+            <input type="file" id="vision-file-will-open"  accept="image/*" multiple class="hidden">
 
             <!-- 平博 Pinnacle -->
             <div>
@@ -189,8 +189,11 @@
                 </button>
               </summary>
               <p class="text-xs text-gray-400 mt-1.5 mb-1 leading-relaxed">
-                截图要求：截取<strong>完整亚盘时间轴</strong>（含最早初盘那行到最新一行）。AI自动读取<strong>初盘水位</strong>与平博初盘对比，计算S2分歧信号。<br>
-                <span class="text-orange-500">注意：截图时间轴要从头开始，不要只截最新一行。</span>
+                截图要求：需包含<strong>初盘行（最底部最早行）</strong>和<strong>最新行（最顶部）</strong>。<br>
+                时间轴太长一屏截不全时，可<strong>同时选两张图</strong>上传：<br>
+                <span class="text-blue-500">· 第1张：时间轴底部（含初盘那行）</span><br>
+                <span class="text-blue-500">· 第2张：时间轴顶部（含最新那行）</span><br>
+                AI会自动合并识别两张截图中的完整数据。
               </p>
               <div class="grid grid-cols-4 gap-1.5 mt-2 items-center">
                 <div class="text-xs text-gray-500 text-center">初盘</div>
@@ -362,14 +365,14 @@
   <div id="toast" class="toast hidden"></div>
 
   <!-- JS 脚本（按依赖顺序加载） -->
-  <script src="js/config.js?v=15"></script>
-  <script src="js/veto.js?v=15"></script>
-  <script src="js/ev.js?v=15"></script>
-  <script src="js/asian.js?v=15"></script>
-  <script src="js/decision.js?v=15"></script>
-  <script src="js/storage.js?v=15"></script>
-  <script src="js/stats.js?v=15"></script>
-  <script src="js/vision.js?v=15"></script>
-  <script src="js/ui.js?v=15"></script>
+  <script src="js/config.js?v=16"></script>
+  <script src="js/veto.js?v=16"></script>
+  <script src="js/ev.js?v=16"></script>
+  <script src="js/asian.js?v=16"></script>
+  <script src="js/decision.js?v=16"></script>
+  <script src="js/storage.js?v=16"></script>
+  <script src="js/stats.js?v=16"></script>
+  <script src="js/vision.js?v=16"></script>
+  <script src="js/ui.js?v=16"></script>
 </body>
 </html>
