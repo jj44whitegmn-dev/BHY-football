@@ -437,7 +437,8 @@ details[open] > summary::after { transform: translateY(-50%) rotate(180deg); }
 .action-signal-icon  { font-size: 1.6rem; line-height: 1; flex-shrink: 0; }
 .action-signal-main  { font-size: 1.05rem; font-weight: 700; color: #1f2937; }
 .action-signal-sub   { font-size: 0.75rem; color: #6b7280; margin-top: 2px; }
-.badge-parlay { background: #dcfce7; color: #15803d; }
+.badge-parlay    { background: #dcfce7; color: #15803d; }
+.badge-backtest  { background: #fff7ed; color: #c2410c; }
 
 .text-green { color: #16a34a; }
 .text-red   { color: #dc2626; }

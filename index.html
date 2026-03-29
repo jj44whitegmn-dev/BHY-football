@@ -26,6 +26,22 @@
     <!-- ========== 分析页 ========== -->
     <div id="page-analysis" class="page active">
 
+      <!-- 模式切换 -->
+      <div class="flex items-center justify-between px-4 pt-3 pb-1">
+        <span class="text-sm text-gray-500">分析模式</span>
+        <label class="flex items-center gap-2 cursor-pointer select-none">
+          <span id="mode-label" class="text-sm font-medium text-gray-600">实盘分析</span>
+          <div class="relative" onclick="App.toggleBacktestMode()">
+            <div id="mode-track" class="w-11 h-6 bg-gray-300 rounded-full transition-colors duration-200"></div>
+            <div id="mode-thumb" class="absolute top-1 left-1 w-4 h-4 bg-white rounded-full shadow transition-transform duration-200"></div>
+          </div>
+        </label>
+      </div>
+      <!-- 历史验证提示条（默认隐藏） -->
+      <div id="backtest-banner" class="hidden mx-4 mb-1 px-3 py-2 bg-orange-50 border border-orange-300 rounded-xl text-xs text-orange-800 leading-relaxed">
+        📊 <strong>历史验证模式</strong> · 时间窗口检查已跳过，S4/S5 正常可用 · 步骤5完成后立即录入赛果
+      </div>
+
       <!-- 步骤指示器 -->
       <div class="flex items-center px-6 py-4">
         <div class="step-dot active" id="dot-1">1</div>
@@ -114,7 +130,7 @@
 
             <!-- 平博 Pinnacle -->
             <div>
-              <div class="flex items-center justify-between mb-2">
+              <div class="flex items-center justify-between mb-1">
                 <span class="text-xs font-semibold text-indigo-600">平博（Pinnacle）</span>
                 <div class="flex gap-1.5">
                   <button id="btn-vision-pinn-open" class="vision-btn">
@@ -126,6 +142,10 @@
                     临盘截图
                   </button>
                 </div>
+              </div>
+              <div class="text-xs text-gray-400 mb-2 leading-relaxed">
+                <span class="text-indigo-400 font-medium">开盘截图：</span>截取<strong>完整亚盘时间轴</strong>（含最早初盘那行）→ 识别初盘+S5降盘信号<br>
+                <span class="text-indigo-400 font-medium">临盘截图：</span>截取<strong>赛前2小时内最新盘口页面</strong>（最后一行）→ 识别终盘+S1/S3/S4信号
               </div>
               <!-- 表头 -->
               <div class="grid grid-cols-4 gap-1.5 mb-1 text-center">
@@ -168,6 +188,10 @@
                   时间轴截图
                 </button>
               </summary>
+              <p class="text-xs text-gray-400 mt-1.5 mb-1 leading-relaxed">
+                截图要求：截取<strong>完整亚盘时间轴</strong>（含最早初盘那行到最新一行）。AI自动读取<strong>初盘水位</strong>与平博初盘对比，计算S2分歧信号。<br>
+                <span class="text-orange-500">注意：截图时间轴要从头开始，不要只截最新一行。</span>
+              </p>
               <div class="grid grid-cols-4 gap-1.5 mt-2 items-center">
                 <div class="text-xs text-gray-500 text-center">初盘</div>
                 <div class="text-xs text-gray-400 text-center">—</div>

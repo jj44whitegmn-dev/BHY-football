@@ -7,9 +7,11 @@
 const App = (() => {
 
   // ── 全局状态 ──────────────────────────────────────────────
-  let currentPage  = 'analysis';
-  let currentStep  = 1;
+  let currentPage   = 'analysis';
+  let currentStep   = 1;
   let recordsFilter = 'all';
+  let isBacktestMode   = false;   // 历史验证模式开关
+  let _backtestResult  = null;    // 历史验证赛果（步骤5立即选择）
 
   // 分析向导：各步骤收集到的数据
   const analysis = {
@@ -86,6 +88,24 @@ const App = (() => {
     if (!w) { el.className = 'hidden'; el.textContent = ''; return; }
     el.className = `text-xs px-3 py-2 rounded-lg mt-1 ${w.cls}`;
     el.textContent = w.label;
+  }
+
+  // ── 历史验证模式 ───────────────────────────────────────────
+  function toggleBacktestMode() {
+    isBacktestMode = !isBacktestMode;
+    _backtestResult = null;
+    _updateModeUI();
+  }
+
+  function _updateModeUI() {
+    const banner = $('backtest-banner');
+    const label  = $('mode-label');
+    const track  = $('mode-track');
+    const thumb  = $('mode-thumb');
+    if (banner) banner.classList.toggle('hidden', !isBacktestMode);
+    if (label)  label.textContent = isBacktestMode ? '历史验证' : '实盘分析';
+    if (track)  track.style.background = isBacktestMode ? '#f97316' : '';
+    if (thumb)  thumb.style.transform  = isBacktestMode ? 'translateX(20px)' : '';
   }
 
   // ── 分析向导：初始化 ───────────────────────────────────────
@@ -192,25 +212,33 @@ const App = (() => {
 
     // 如果到步骤4，自动填入可自动计算的信号，并展示市场解读
     if (n === 4) {
-      // 检查时间窗口，决定是否噪音区
-      const win = _checkTimeWindow();
-      _noiseZone = win ? win.autoZero : false;
-
-      // 更新步骤4顶部的时间窗口警告
       const warnEl = $('s4-window-warning');
-      if (warnEl) {
-        if (win) {
-          warnEl.className = `rounded-xl p-3 text-xs leading-relaxed ${win.cls}`;
-          if (win.code === 'noise' || win.code === 'started') {
-            warnEl.innerHTML = `<strong>时间窗口：${win.label}</strong><br>S4 盘口背离、S5 降盘异常两项信号已自动置 0，无法手动修改。`;
-          } else if (win.code === 'early') {
-            warnEl.innerHTML = `<strong>时间窗口：${win.label}</strong><br>建议等盘口稳定后（开球前 4-12 小时）再分析 S4/S5 信号。`;
-          } else {
-            warnEl.innerHTML = `<strong>时间窗口：${win.label}</strong>`;
-          }
+      if (isBacktestMode) {
+        // 历史验证模式：跳过时间窗口，S4/S5 正常可用
+        _noiseZone = false;
+        if (warnEl) {
+          warnEl.className = 'rounded-xl p-3 text-xs leading-relaxed bg-orange-50 text-orange-700 border border-orange-200';
+          warnEl.innerHTML = '<strong>历史验证模式</strong> · 时间窗口检查已跳过，S4/S5 信号正常可用。请根据澳客历史盘口时间轴填写信号。';
           warnEl.classList.remove('hidden');
-        } else {
-          warnEl.classList.add('hidden');
+        }
+      } else {
+        // 实盘模式：正常检查时间窗口
+        const win = _checkTimeWindow();
+        _noiseZone = win ? win.autoZero : false;
+        if (warnEl) {
+          if (win) {
+            warnEl.className = `rounded-xl p-3 text-xs leading-relaxed ${win.cls}`;
+            if (win.code === 'noise' || win.code === 'started') {
+              warnEl.innerHTML = `<strong>时间窗口：${win.label}</strong><br>S4 盘口背离、S5 降盘异常两项信号已自动置 0，无法手动修改。`;
+            } else if (win.code === 'early') {
+              warnEl.innerHTML = `<strong>时间窗口：${win.label}</strong><br>建议等盘口稳定后（开球前 4-12 小时）再分析 S4/S5 信号。`;
+            } else {
+              warnEl.innerHTML = `<strong>时间窗口：${win.label}</strong>`;
+            }
+            warnEl.classList.remove('hidden');
+          } else {
+            warnEl.classList.add('hidden');
+          }
         }
       }
 
@@ -695,6 +723,23 @@ const App = (() => {
     };
 
     $('s5-result').innerHTML = buildResultHTML(analysis.step1, vr, er, sigs, total, dec);
+
+    // 历史验证模式：步骤5底部立即出现赛果选择
+    if (isBacktestMode) {
+      _backtestResult = null;
+      const btDiv = document.createElement('div');
+      btDiv.id = 's5-backtest-result';
+      btDiv.className = 'bg-orange-50 border-2 border-orange-300 rounded-xl p-4 mt-3';
+      btDiv.innerHTML = `
+        <p class="text-sm font-semibold text-orange-800 mb-3">📊 录入实际赛果（历史验证必填）</p>
+        <div class="grid grid-cols-3 gap-2 mb-2">
+          <button class="btn btn-ghost" onclick="App.setBacktestResult('主胜')">主胜</button>
+          <button class="btn btn-ghost" onclick="App.setBacktestResult('平局')">平局</button>
+          <button class="btn btn-ghost" onclick="App.setBacktestResult('客胜')">客胜</button>
+        </div>
+        <p id="bt-res-label" class="text-xs text-center text-gray-400">点击上方按钮选择赛果后保存</p>`;
+      $('s5-result').appendChild(btDiv);
+    }
   }
 
   function buildResultHTML(info, vr, er, sigs, total, dec) {
@@ -858,10 +903,29 @@ const App = (() => {
       </div>`;
   }
 
+  // ── 历史验证赛果选择 ────────────────────────────────────────
+  function setBacktestResult(result) {
+    _backtestResult = result;
+    const label = $('bt-res-label');
+    if (label) label.textContent = `已选择：${result} ✓`;
+    // 高亮对应按钮
+    const btns = document.querySelectorAll('#s5-backtest-result .btn');
+    btns.forEach(btn => {
+      const match = btn.textContent.trim() === result;
+      btn.classList.toggle('btn-primary', match);
+      btn.classList.toggle('btn-ghost', !match);
+    });
+  }
+
   // ── 保存记录 ───────────────────────────────────────────────
   function saveRecord() {
     const { vetoResult: vr, evResult: er, asianTotal, decision: dec } = analysis.result;
     const s1 = analysis.step1, s2 = analysis.step2, s3 = analysis.step3;
+
+    // 历史验证模式必须选择赛果
+    if (isBacktestMode && !_backtestResult) {
+      toast('历史验证模式：请先选择实际赛果', 'error'); return;
+    }
 
     const record = {
       date:       s1.date,
@@ -902,11 +966,17 @@ const App = (() => {
       parlay_eligible: dec.parlay_eligible || false,
       analysis_window: (() => { const w = _checkTimeWindow(); return w ? w.code : 'unknown'; })(),
       model_version:   Config.MODEL_VERSION,
+      is_backtest:     isBacktestMode,
       clv_tracking:    null,
       betted:          false,
       bet_selection:   null,
-      actual_result:   '',
-      is_correct:      null,
+      actual_result:   isBacktestMode ? (_backtestResult || '') : '',
+      is_correct:      (() => {
+        if (!isBacktestMode || !_backtestResult) return null;
+        const rec_recommend = dec.recommend;
+        if (!rec_recommend) return null;
+        return _backtestResult === rec_recommend;
+      })(),
       notes:           '',
     };
 
@@ -917,6 +987,7 @@ const App = (() => {
 
   // ── 重置分析 ───────────────────────────────────────────────
   function restartAnalysis() {
+    _backtestResult = null;   // 清除上一场的赛果选择，模式保持不变
     // 清空状态
     Object.keys(analysis).forEach(k => { analysis[k] = {}; });
     // 清空表单
@@ -958,13 +1029,13 @@ const App = (() => {
         ? `<span class="badge ${rec.is_correct === true ? 'badge-correct' : rec.is_correct === false ? 'badge-wrong' : 'badge-gray'}">${rec.actual_result}${rec.is_correct === true ? ' ✓' : rec.is_correct === false ? ' ✗' : ''}</span>`
         : `<span class="badge badge-pending">待回填</span>`;
       const actionIcon = { '建议买入':'🟢', '可小额参考':'🟡', '不建议买入':'🔴', '跳过':'⚫' }[rec.action_signal] || '⚫';
-      const parlayBadge = rec.parlay_eligible
-        ? `<span class="badge badge-parlay">✅ 可入串</span>` : '';
+      const parlayBadge = rec.parlay_eligible ? `<span class="badge badge-parlay">✅ 可入串</span>` : '';
+      const backtestBadge = rec.is_backtest ? `<span class="badge badge-backtest">📊 验证</span>` : '';
       return `
         <div class="record-card" onclick="App.openRecord(${rec.id})">
           <div class="record-header">
             <span class="record-date">${rec.date || ''} ${rec.time || ''}</span>
-            ${resultBadge}
+            <div class="flex items-center gap-1">${backtestBadge}${resultBadge}</div>
           </div>
           <div class="record-teams">${rec.home_team} <span class="text-gray-400 font-normal text-sm">vs</span> ${rec.away_team}</div>
           <div class="record-meta">
@@ -1159,8 +1230,10 @@ const App = (() => {
                   <option value="">平博关盘方向（赔率最低项）</option>
                   <option value="主胜">主胜</option><option value="平局">平局</option><option value="客胜">客胜</option>
                 </select>
-                <div class="text-xs text-gray-400 pt-1">体彩内部追踪（可选）</div>
-                <input id="clv-tc-buy-${id}" type="number" step="0.01" min="1" placeholder="体彩买入赔率（押注选项）" class="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm">
+                <div class="text-xs text-gray-400 pt-1">
+                  ${rec.is_backtest ? '体彩内部追踪（历史验证：填赛前4小时赔率）' : '体彩内部追踪（可选）'}
+                </div>
+                <input id="clv-tc-buy-${id}" type="number" step="0.01" min="1" placeholder="${rec.is_backtest ? '体彩赛前4小时赔率（押注选项）' : '体彩买入赔率（押注选项）'}" class="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm">
                 <input id="clv-tc-close-${id}" type="number" step="0.01" min="1" placeholder="体彩关盘赔率（同选项）" class="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm">
               </div>
               <button onclick="App.saveClv(${id})" class="btn btn-primary w-full text-sm">保存CLV</button>
@@ -1705,6 +1778,8 @@ const App = (() => {
 
   // 公开给 inline onclick 使用的函数
   return {
+    toggleBacktestMode,
+    setBacktestResult,
     openRecord,
     fillResult,
     saveClv,
